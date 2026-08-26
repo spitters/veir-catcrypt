@@ -221,6 +221,11 @@ match opCode with
 | .mod_arith_constant => ModArithConstantProperties
 | _ => Unit
 
+-- The `decideEq` field below uses a double `cases opCode` which is N² in
+-- the number of opcodes; adding new dialect blocks (Memref, Polynomial,
+-- Vector, X86vector, Scf, Cf) pushed this past the default heartbeat
+-- budget. Bump it locally.
+set_option maxHeartbeats 1000000 in
 instance : HasOpInfo OpCode where
   moduleOpCode := .builtin_module
   propertiesOf := propertiesOf

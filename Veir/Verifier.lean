@@ -328,6 +328,13 @@ def OperationPtr.verifyLocalInvariants (op : OperationPtr) (ctx : IRContext OpCo
     if op.getNumSuccessors ctx opIn ≠ 0 then
       throw "Expected 0 successors"
     pure ()
+  | .func_call => do
+    if op.getNumRegions ctx opIn ≠ 0 then
+      throw "Expected 0 regions"
+    if op.getNumSuccessors ctx opIn ≠ 0 then
+      throw "Expected 0 successors"
+    pure ()
+  | .catcrypt_unknown => pure ()
   | .func_return => do
     if op.getNumResults ctx opIn ≠ 0 then
       throw "Expected 0 results"

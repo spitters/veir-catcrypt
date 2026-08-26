@@ -56,6 +56,7 @@ inductive Builtin where
 inductive Func where
 | func
 | return
+| call
 
 @[opcodes]
 inductive Llvm where
@@ -178,6 +179,110 @@ inductive Mod_Arith where
 @[opcodes]
 inductive Test where
 | test
+
+/-- CatCrypt dialect: a holding pen for CatCrypt ops with no direct
+    counterpart in Veir's enum (pair/sum construction, etc.).
+    Lowered ops use `catcrypt.unknown` which `mlir-opt` accepts under
+    `--allow-unregistered-dialect`. -/
+@[opcodes]
+inductive Catcrypt where
+| unknown
+
+/-- MLIR `memref` dialect (buffer/memory references). Lets the CatCrypt
+    `memref{Zero,Get,Set}` ops lower to registered `memref.*` ops instead of
+    `catcrypt.unknown`. -/
+@[opcodes]
+inductive Memref where
+| alloc
+| alloca
+| dealloc
+| load
+| store
+| get_global
+| global
+| copy
+| subview
+| dim
+
+/-- MLIR `polynomial` dialect (upstream, for lattice/FHE arithmetic over
+    `Z_q[X]/(f)`). Target for lowering the `latticeDialect`
+    (`ntt`/`invntt`/`basemul`/`polyAddN`/`polyMulC`). -/
+@[opcodes]
+inductive Polynomial where
+| add
+| sub
+| mul
+| mul_scalar
+| ntt
+| intt
+| constant
+| from_tensor
+| to_tensor
+
+/-- MLIR `vector` dialect (upstream). Target for lowering packed
+    `stackArr w n` operations that the jasmin / Frodo / GF / MAYO / qruov
+    emitters use to express SIMD-shaped arithmetic. Lets us route the
+    packed-u16/u32/u64 emits to a registered MLIR dialect (`vector.*`)
+    rather than `catcrypt.unknown`. Op coverage matches what the jasmin
+    sopn vector-shape ops currently emit through the verified front. -/
+@[opcodes]
+inductive Vector where
+| broadcast
+| extract
+| insert
+| extractelement
+| insertelement
+| fma
+| reduction
+| splat
+| load
+| store
+| transfer_read
+| transfer_write
+| shuffle
+
+/-- MLIR `x86vector` dialect (upstream). Target for the x86-specific
+    intrinsics jasmin's sopn carries through to assembly: PCLMUL
+    (GF(2^k) carry-less multiply for GCM / GF arithmetic), AES-NI
+    (AESENC / AESDEC for AES block primitives), and VPSHUFB
+    (byte-shuffle for permutation networks). Today this block is the
+    LANDING ZONE for lowering jasmin's `extCall "pclmulqdq"`,
+    `"aesenc"`, `"vpshufb"` leaves to registered MLIR ops. -/
+@[opcodes]
+inductive X86vector where
+| pclmulqdq
+| aesenc
+| aesenclast
+| aesdec
+| aesdeclast
+| aeskeygenassist
+| vpshufb
+| mask_compress
+| mask_rndscale
+| rsqrt
+
+/-- MLIR `scf` (structured control flow) dialect. Loop ops from the
+    jasmin `JForProg*` layer lower to `scf.for` / `scf.if`; the
+    block-arg / yield form is cleaner than `cf.br` for what we emit. -/
+@[opcodes]
+inductive Scf where
+| for_
+| if_
+| while_
+| yield_
+| execute_region
+| index_switch
+| parallel_
+
+/-- MLIR `cf` (control flow) dialect. Fallback target for unstructured
+    jumps when `scf` doesn't fit (e.g. arbitrary basic-block goto).
+    Mostly here as a backup; structured `scf` is preferred. -/
+@[opcodes]
+inductive Cf where
+| br
+| cond_br
+| switch
+| assert_
 
 public section
 

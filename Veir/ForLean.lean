@@ -94,23 +94,34 @@ theorem Array.reverse_singleton (a : α) :
     #[a].reverse = #[a] := by
   simp
 
-theorem List.idxOf_getElem [DecidableEq α] {l : List α} (H : Nodup l) (i : Nat) (h : i < l.length) :
-    idxOf l[i] l = i := by
+-- Local patch (CatCrypt): moved these two `List.*` lemmas into the `Veir.`
+-- namespace to avoid a collision with Mathlib/Batteries lemmas of the same
+-- names (`List.idxOf_getElem` in `Mathlib.Data.List.Nodup`, and
+-- `List.getElem_idxOf` in `Batteries.Data.List.Lemmas`). Upstream Veir
+-- PR #626 fixed only the original `List.getElem?_idxOf` collision; this
+-- additional rename is a CatCrypt-side workaround until upstream namespaces
+-- both lemmas.
+namespace Veir.List
+
+theorem idxOf_getElem [DecidableEq α] {l : _root_.List α} (H : l.Nodup) (i : Nat) (h : i < l.length) :
+    _root_.List.idxOf l[i] l = i := by
   induction l generalizing i <;> grind
 
-theorem List.getElem?_idxOf [DecidableEq α] {l : List α} (h : l.idxOf x < l.length) :
+theorem getElem_idxOf [DecidableEq α] {l : _root_.List α} (h : l.idxOf x < l.length) :
     l[l.idxOf x] = x := by
   induction l <;> grind
+
+end Veir.List
 
 @[simp, grind =]
 theorem Array.getElem?_idxOf [DecidableEq α] {l : Array α} (h : l.idxOf x < l.size) :
     l[l.idxOf x]? = some x := by
-  rcases l; grind [List.getElem?_idxOf]
+  rcases l; grind [Veir.List.getElem_idxOf]
 
 @[simp, grind =]
 theorem Array.getElem_idxOf [DecidableEq α] {l : Array α} (h : l.idxOf x < l.size) :
     l[l.idxOf x] = x := by
-  rcases l; grind [List.getElem?_idxOf]
+  rcases l; grind [Veir.List.getElem_idxOf]
 
 @[simp, grind =]
 theorem Array.toList_erase [BEq α] (l : Array α) (a : α) :
