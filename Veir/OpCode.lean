@@ -261,29 +261,6 @@ inductive X86vector where
 | mask_rndscale
 | rsqrt
 
-/-- MLIR `scf` (structured control flow) dialect. Loop ops from the
-    jasmin `JForProg*` layer lower to `scf.for` / `scf.if`; the
-    block-arg / yield form is cleaner than `cf.br` for what we emit. -/
-@[opcodes]
-inductive Scf where
-| for_
-| if_
-| while_
-| yield_
-| execute_region
-| index_switch
-| parallel_
-
-/-- MLIR `cf` (control flow) dialect. Fallback target for unstructured
-    jumps when `scf` doesn't fit (e.g. arbitrary basic-block goto).
-    Mostly here as a backup; structured `scf` is preferred. -/
-@[opcodes]
-inductive Cf where
-| br
-| cond_br
-| switch
-| assert_
-
 public section
 
 /-
