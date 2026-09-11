@@ -1,7 +1,11 @@
-import Veir.IR.Basic
-import Veir.IR.Grind
-import Veir.Rewriter.Basic
-import Veir.Properties
+module
+
+public import Veir.IR.Basic
+public import Veir.IR.Grind
+public import Veir.Rewriter.Basic
+public import Veir.Properties
+
+@[expose] public section
 
 open Veir
 

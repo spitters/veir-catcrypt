@@ -1,6 +1,12 @@
-import Veir.IR
-import Veir.Rewriter.InsertPoint
-import Veir.Rewriter.LinkedList
+module
+
+public import Veir.IR
+public import Veir.Rewriter.InsertPoint
+public import Veir.Rewriter.LinkedList
+import all Veir.Prelude
+import all Veir.IR.Basic
+
+public section
 
 namespace Veir
 
