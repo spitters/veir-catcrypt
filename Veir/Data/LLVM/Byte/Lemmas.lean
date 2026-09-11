@@ -7,12 +7,9 @@ namespace Veir.Data.LLVM.Byte
 open Veir.Data.LLVM.Int
 
 theorem toInt_fromInt {w : Nat} (x : Int w) (h : 0 < w) : (Byte.fromInt x).toInt = x := by
-  simp only [Byte.toInt, fromInt]
   cases x
-  · simp
-  · have := Nat.two_pow_pred_lt_two_pow h
-    have := Nat.two_pow_pos (w-1)
-    rw [ite_eq_right_iff, BitVec.toNat_eq]
+  · simp [Byte.toInt, fromInt]
+  · simp only [Byte.toInt, fromInt]
     simp
     omega
 
