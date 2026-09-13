@@ -19,10 +19,11 @@ Changes from v4.29.0:
 - `Veir/Verifier.lean` and `Veir/Properties.lean`: the verifier cases for the new
   opcodes, and a raised heartbeat limit on the opcode decidable-equality instance,
   whose case split grows with the square of the number of opcodes.
-- `Veir/ForLean.lean` and its users: two list lemmas renamed, because Mathlib
+- `Veir/ForLean.lean`: two list lemmas renamed, because Mathlib
   declares lemmas with the same names.
 - `Veir/Printer.lean` and `Veir/Rewriter/Basic.lean` as Lean modules.
-- `lean-toolchain`: Lean v4.33.1.
+- `lean-toolchain`: Lean v4.33.1, with the proof repairs that toolchain needs in
+  `Veir/Data/LLVM/Byte/Lemmas.lean` and `Veir/Rewriter/LinkedList/WellFormed.lean`.
 
 ## Testing
 
