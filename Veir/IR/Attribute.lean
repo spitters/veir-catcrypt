@@ -399,6 +399,73 @@ structure LLVMIntegerOverflowFlagsAttr where
   nuw : Bool
 deriving Inhabited, Repr, DecidableEq, Hashable
 
+/--
+  The form of a prime-ir elliptic curve attribute: short Weierstrass
+  (`#elliptic_curve.sw`, `y² = x³ + ax + b`) or twisted Edwards
+  (`#elliptic_curve.te`, `ax² + y² = 1 + dx²y²`).
+-/
+inductive EllipticCurveForm where
+  | sw
+  | te
+deriving Inhabited, Repr, DecidableEq, Hashable
+
+/-- The mnemonic of an elliptic curve form, `sw` or `te`. -/
+def EllipticCurveForm.mnemonic : EllipticCurveForm → String
+  | .sw => "sw"
+  | .te => "te"
+
+/--
+  The coordinate representation of a prime-ir elliptic curve point type
+  (`EllipticCurveTypes.td`). `affine`, `jacobian` and `xyzz` take a short
+  Weierstrass curve, `edAffine` and `edExtended` a twisted Edwards curve.
+-/
+inductive EllipticCurvePointRepr where
+  | affine
+  | jacobian
+  | xyzz
+  | edAffine
+  | edExtended
+deriving Inhabited, Repr, DecidableEq, Hashable
+
+/-- The prime-ir type mnemonic of a point representation, e.g. `ed_extended`. -/
+def EllipticCurvePointRepr.primeIrName : EllipticCurvePointRepr → String
+  | .affine => "affine"
+  | .jacobian => "jacobian"
+  | .xyzz => "xyzz"
+  | .edAffine => "ed_affine"
+  | .edExtended => "ed_extended"
+
+/-- The curve form a point representation requires. -/
+def EllipticCurvePointRepr.form : EllipticCurvePointRepr → EllipticCurveForm
+  | .affine | .jacobian | .xyzz => .sw
+  | .edAffine | .edExtended => .te
+
+/-- All point representations, in declaration order. -/
+def EllipticCurvePointRepr.all : List EllipticCurvePointRepr :=
+  [.affine, .jacobian, .xyzz, .edAffine, .edExtended]
+
+/--
+  The basis of a prime-ir `!ring.rq` value: the coefficient basis (`coeff`, the
+  default) or the evaluation basis (`eval`) (`RingEnums.td`).
+-/
+inductive RingDomain where
+  | coeff
+  | eval
+deriving Inhabited, Repr, DecidableEq, Hashable
+
+/--
+  The prime-ir quotient ring type `!ring.rq<[q₀, …], N : iK[, iW][, eval]>`,
+  i.e. `Z_Q[X]/(X^N + 1)` with `Q = ∏ qᵢ` (`RingTypes.td`). `storageType` is the
+  residue word type, omitted from the text when it is `i64`; `domain` is omitted
+  when it is `coeff`.
+-/
+structure RqType where
+  moduli : Array Int
+  ringDegree : IntegerAttr
+  storageType : IntegerType := IntegerType.mk 64
+  domain : RingDomain := .coeff
+deriving Inhabited, Repr, DecidableEq, Hashable
+
 /-- The bitwidth of the storage type of a `!mod_arith.int`. -/
 public def ModArithType.bitwidth (ty : ModArithType) : Nat :=
   ty.modulus.type.bitwidth
@@ -634,6 +701,39 @@ structure ExtensionFieldType where
   nonResidue : Attribute
 
 /--
+  A prime-ir elliptic curve attribute, `#elliptic_curve.sw<a, b, (Gx, Gy)> : F` or
+  `#elliptic_curve.te<a, d, (Gx, Gy)> : F` (`EllipticCurveAttributes.td`). `b` holds
+  `d` for a twisted Edwards curve. The coefficients and the generator are field
+  attributes: integer attributes of the storage type (`3 : i256`) over a prime
+  field, dense elements attributes over an extension field. prime-ir checks that
+  the generator lies on the curve; VeIR does not.
+-/
+structure EllipticCurveAttr where
+  form : EllipticCurveForm
+  baseField : Attribute
+  a : Attribute
+  b : Attribute
+  gx : Attribute
+  gy : Attribute
+
+/--
+  A prime-ir point type `!elliptic_curve.<repr><#curve>`, e.g.
+  `!elliptic_curve.jacobian<#elliptic_curve.sw<…> : !field.pf<…>>`. `curve` is an
+  elliptic curve attribute whose form matches `repr.form`.
+-/
+structure EllipticCurvePointType where
+  repr : EllipticCurvePointRepr
+  curve : Attribute
+
+/--
+  The prime-ir polynomial type `!poly.polynomial<F, maxDegree>` over a prime field
+  `F` (`PolyTypes.td`).
+-/
+structure PolyType where
+  baseField : Attribute
+  maxDegree : IntegerAttr
+
+/--
   The signature of a function, consisting of an array of input attributes
   and an array of output attributes.
 -/
@@ -863,6 +963,14 @@ inductive Attribute
 | primeFieldType (type : PrimeFieldType)
 /-- prime-ir extension field type -/
 | extensionFieldType (type : ExtensionFieldType)
+/-- prime-ir elliptic curve attribute (`#elliptic_curve.sw` or `#elliptic_curve.te`) -/
+| ellipticCurveAttr (attr : EllipticCurveAttr)
+/-- prime-ir elliptic curve point type -/
+| ellipticCurvePointType (type : EllipticCurvePointType)
+/-- prime-ir polynomial type -/
+| polyType (type : PolyType)
+/-- prime-ir quotient ring type -/
+| rqType (type : RqType)
 deriving Inhabited
 
 end
@@ -870,11 +978,13 @@ end
 /- Derive Repr and Hashable instances for the mutual group. -/
 derive_mutual_repr for
   VectorType, RankedTensorType, MemRefType, ExtensionFieldType,
+  EllipticCurveAttr, EllipticCurvePointType, PolyType,
   FunctionType, LLVMFunctionType, CirFuncType,
   ArrayAttr, DictionaryAttr, LLVM.ArrayType, LLVM.StructType, Match.OptionalType,
   UnregisteredAttr, Attribute
 derive_mutual_hashable for
   VectorType, RankedTensorType, MemRefType, ExtensionFieldType,
+  EllipticCurveAttr, EllipticCurvePointType, PolyType,
   FunctionType, LLVMFunctionType, CirFuncType,
   ArrayAttr, DictionaryAttr, LLVM.ArrayType, LLVM.StructType, Match.OptionalType,
   UnregisteredAttr, Attribute
@@ -891,6 +1001,18 @@ instance : Inhabited MemRefType where
 instance : Inhabited ExtensionFieldType where
   default := { degree := 2, base := .integerType (IntegerType.signless 0),
                nonResidue := .integerType (IntegerType.signless 0) }
+
+instance : Inhabited EllipticCurveAttr where
+  default := { form := .sw, baseField := .integerType (IntegerType.mk 0),
+               a := .integerType (IntegerType.mk 0), b := .integerType (IntegerType.mk 0),
+               gx := .integerType (IntegerType.mk 0), gy := .integerType (IntegerType.mk 0) }
+
+instance : Inhabited EllipticCurvePointType where
+  default := { repr := .affine, curve := .integerType (IntegerType.mk 0) }
+
+instance : Inhabited PolyType where
+  default := { baseField := .integerType (IntegerType.mk 0),
+               maxDegree := IntegerAttr.mk 0 (IntegerType.mk 64) }
 
 instance : Coe FunctionType LLVMFunctionType where
   coe := .mk
@@ -945,6 +1067,34 @@ theorem ExtensionFieldType.sizeOf_base {t : ExtensionFieldType} :
 theorem ExtensionFieldType.sizeOf_nonResidue {t : ExtensionFieldType} :
     sizeOf t.nonResidue < sizeOf t := by
   grind [cases ExtensionFieldType]
+
+theorem EllipticCurveAttr.sizeOf_baseField {t : EllipticCurveAttr} :
+    sizeOf t.baseField < sizeOf t := by
+  grind [cases EllipticCurveAttr]
+
+theorem EllipticCurveAttr.sizeOf_a {t : EllipticCurveAttr} :
+    sizeOf t.a < sizeOf t := by
+  grind [cases EllipticCurveAttr]
+
+theorem EllipticCurveAttr.sizeOf_b {t : EllipticCurveAttr} :
+    sizeOf t.b < sizeOf t := by
+  grind [cases EllipticCurveAttr]
+
+theorem EllipticCurveAttr.sizeOf_gx {t : EllipticCurveAttr} :
+    sizeOf t.gx < sizeOf t := by
+  grind [cases EllipticCurveAttr]
+
+theorem EllipticCurveAttr.sizeOf_gy {t : EllipticCurveAttr} :
+    sizeOf t.gy < sizeOf t := by
+  grind [cases EllipticCurveAttr]
+
+theorem EllipticCurvePointType.sizeOf_curve {t : EllipticCurvePointType} :
+    sizeOf t.curve < sizeOf t := by
+  grind [cases EllipticCurvePointType]
+
+theorem PolyType.sizeOf_baseField {t : PolyType} :
+    sizeOf t.baseField < sizeOf t := by
+  grind [cases PolyType]
 
 theorem LLVMFunctionType.sizeOf_functionType {ft : LLVMFunctionType} :
     sizeOf ft.functionType < sizeOf ft := by
@@ -1129,6 +1279,16 @@ instance : ToString ModArithType where
 instance : ToString PrimeFieldType where
   toString type := "!field.pf" ++ modulusBodyString type.modulus type.isMontgomery
 
+/-- Prints `!ring.rq<[q₀, …], N : iK[, iW][, eval]>`, as prime-ir's `RqType::print`. -/
+instance : ToString RqType where
+  toString type :=
+    let moduli := String.intercalate ", " (type.moduli.toList.map ToString.toString)
+    let storage := if type.storageType.bitwidth = 64 then "" else s!", {type.storageType}"
+    let domain := match type.domain with
+      | .coeff => ""
+      | .eval => ", eval"
+    s!"!ring.rq<[{moduli}], {type.ringDegree}{storage}{domain}>"
+
 instance : ToString IndexAttr where
   toString attr := s!"{attr.value} : index"
 
@@ -1231,6 +1391,17 @@ partial def MemRefType.toString (type : MemRefType) : String :=
 
 partial def ExtensionFieldType.toString (type : ExtensionFieldType) : String :=
   s!"!field.ef<{type.degree}x{Attribute.toString type.base}, {Attribute.toString type.nonResidue}>"
+
+partial def EllipticCurveAttr.toString (attr : EllipticCurveAttr) : String :=
+  s!"#elliptic_curve.{attr.form.mnemonic}<{Attribute.toString attr.a}, " ++
+    s!"{Attribute.toString attr.b}, ({Attribute.toString attr.gx}, " ++
+    s!"{Attribute.toString attr.gy})> : {Attribute.toString attr.baseField}"
+
+partial def EllipticCurvePointType.toString (type : EllipticCurvePointType) : String :=
+  s!"!elliptic_curve.{type.repr.primeIrName}<{Attribute.toString type.curve}>"
+
+partial def PolyType.toString (type : PolyType) : String :=
+  s!"!poly.polynomial<{Attribute.toString type.baseField}, {type.maxDegree}>"
 
 partial def ArrayAttr.toString (attr : ArrayAttr) : String :=
   let elems := String.intercalate ", " (attr.value.toList.map Attribute.toString)
@@ -1377,6 +1548,10 @@ partial def Attribute.toString (attr : Attribute) : String :=
   | .llvmIntegerOverflowFlagsAttr attr => ToString.toString attr
   | .primeFieldType type => ToString.toString type
   | .extensionFieldType type => type.toString
+  | .ellipticCurveAttr attr => attr.toString
+  | .ellipticCurvePointType type => type.toString
+  | .polyType type => type.toString
+  | .rqType type => ToString.toString type
 
 end
 
@@ -1394,6 +1569,15 @@ instance : ToString MemRefType where
 
 instance : ToString ExtensionFieldType where
   toString := ExtensionFieldType.toString
+
+instance : ToString EllipticCurveAttr where
+  toString := EllipticCurveAttr.toString
+
+instance : ToString EllipticCurvePointType where
+  toString := EllipticCurvePointType.toString
+
+instance : ToString PolyType where
+  toString := PolyType.toString
 
 instance : ToString FunctionType where
   toString := FunctionType.toString
@@ -1724,6 +1908,55 @@ decreasing_by
     | exact ExtensionFieldType.sizeOf_base
     | exact ExtensionFieldType.sizeOf_nonResidue
 
+def EllipticCurveAttr.decEq (attr1 attr2 : EllipticCurveAttr) : Decidable (attr1 = attr2) :=
+  if hform : attr1.form = attr2.form then
+    match Attribute.decEq attr1.baseField attr2.baseField with
+    | isTrue _ =>
+      match Attribute.decEq attr1.a attr2.a with
+      | isTrue _ =>
+        match Attribute.decEq attr1.b attr2.b with
+        | isTrue _ =>
+          match Attribute.decEq attr1.gx attr2.gx with
+          | isTrue _ =>
+            match Attribute.decEq attr1.gy attr2.gy with
+            | isTrue _ => isTrue (by grind [cases EllipticCurveAttr])
+            | isFalse _ => isFalse (by grind)
+          | isFalse _ => isFalse (by grind)
+        | isFalse _ => isFalse (by grind)
+      | isFalse _ => isFalse (by grind)
+    | isFalse _ => isFalse (by grind)
+  else
+    isFalse (by grind)
+termination_by sizeOf attr1
+decreasing_by
+  all_goals first
+    | exact EllipticCurveAttr.sizeOf_baseField
+    | exact EllipticCurveAttr.sizeOf_a
+    | exact EllipticCurveAttr.sizeOf_b
+    | exact EllipticCurveAttr.sizeOf_gx
+    | exact EllipticCurveAttr.sizeOf_gy
+
+def EllipticCurvePointType.decEq (type1 type2 : EllipticCurvePointType) :
+    Decidable (type1 = type2) :=
+  if hrepr : type1.repr = type2.repr then
+    match Attribute.decEq type1.curve type2.curve with
+    | isTrue _ => isTrue (by grind [cases EllipticCurvePointType])
+    | isFalse _ => isFalse (by grind)
+  else
+    isFalse (by grind)
+termination_by sizeOf type1
+decreasing_by exact EllipticCurvePointType.sizeOf_curve
+
+def PolyType.decEq (type1 type2 : PolyType) : Decidable (type1 = type2) :=
+  if hdeg : type1.maxDegree = type2.maxDegree then
+    match Attribute.decEq type1.baseField type2.baseField with
+    | isTrue _ => isTrue (by grind [cases PolyType])
+    | isFalse _ => isFalse (by grind)
+  else
+    isFalse (by grind)
+termination_by sizeOf type1
+decreasing_by exact PolyType.sizeOf_baseField
+
 def FunctionType.decEq (type1 type2 : FunctionType) : Decidable (type1 = type2) :=
   let inputs1 := type1.inputs
   let outputs1 := type1.outputs
@@ -1975,6 +2208,14 @@ def Attribute.decEq (attr1 attr2 : @& Attribute) : Decidable (attr1 = attr2) := 
     exact IsAttr.decEqAgainst x attr2 (decEq x)
   case extensionFieldType x =>
     exact IsAttr.decEqAgainst x attr2 (ExtensionFieldType.decEq x)
+  case ellipticCurveAttr x =>
+    exact IsAttr.decEqAgainst x attr2 (EllipticCurveAttr.decEq x)
+  case ellipticCurvePointType x =>
+    exact IsAttr.decEqAgainst x attr2 (EllipticCurvePointType.decEq x)
+  case polyType x =>
+    exact IsAttr.decEqAgainst x attr2 (PolyType.decEq x)
+  case rqType x =>
+    exact IsAttr.decEqAgainst x attr2 (decEq x)
 termination_by sizeOf attr1
 decreasing_by
   all_goals exact Nat.lt_add_of_pos_left (by decide)
@@ -1985,6 +2226,9 @@ instance : DecidableEq VectorType := VectorType.decEq
 instance : DecidableEq RankedTensorType := RankedTensorType.decEq
 instance : DecidableEq MemRefType := MemRefType.decEq
 instance : DecidableEq ExtensionFieldType := ExtensionFieldType.decEq
+instance : DecidableEq EllipticCurveAttr := EllipticCurveAttr.decEq
+instance : DecidableEq EllipticCurvePointType := EllipticCurvePointType.decEq
+instance : DecidableEq PolyType := PolyType.decEq
 instance : DecidableEq FunctionType := FunctionType.decEq
 instance : DecidableEq LLVMFunctionType := LLVMFunctionType.decEq
 instance : DecidableEq CirFuncType := CirFuncType.decEq
@@ -2070,6 +2314,10 @@ def isType (attr : Attribute) : Bool :=
   | .llvmIntegerOverflowFlagsAttr _ => false
   | .primeFieldType _ => true
   | .extensionFieldType _ => true
+  | .ellipticCurveAttr _ => false
+  | .ellipticCurvePointType _ => true
+  | .polyType _ => true
+  | .rqType _ => true
 
 /--
   Returns the size, in bits, that an LLVM type would use if stored to memory.
@@ -2182,6 +2430,14 @@ theorem isType_llvmIntegerOverflowFlagsAttr attr :
 theorem isType_primeFieldType type : (Attribute.of PrimeFieldType type).isType = true := by rfl
 @[simp, grind =]
 theorem isType_extensionFieldType type : (Attribute.of ExtensionFieldType type).isType = true := by rfl
+@[simp, grind =]
+theorem isType_ellipticCurveAttr attr : (Attribute.of EllipticCurveAttr attr).isType = false := by rfl
+@[simp, grind =]
+theorem isType_ellipticCurvePointType type : (Attribute.of EllipticCurvePointType type).isType = true := by rfl
+@[simp, grind =]
+theorem isType_polyType type : (Attribute.of PolyType type).isType = true := by rfl
+@[simp, grind =]
+theorem isType_rqType type : (Attribute.of RqType type).isType = true := by rfl
 
 end Attribute
 
@@ -2436,6 +2692,18 @@ instance : IsTypeAttr PrimeFieldType where
 
 instance : IsTypeAttr ExtensionFieldType where
   coe type := Attribute.asType (.extensionFieldType type) (by rfl)
+  coe_eq_inject _ := by rfl
+
+instance : IsTypeAttr EllipticCurvePointType where
+  coe type := Attribute.asType (.ellipticCurvePointType type) (by rfl)
+  coe_eq_inject _ := by rfl
+
+instance : IsTypeAttr PolyType where
+  coe type := Attribute.asType (.polyType type) (by rfl)
+  coe_eq_inject _ := by rfl
+
+instance : IsTypeAttr RqType where
+  coe type := Attribute.asType (.rqType type) (by rfl)
   coe_eq_inject _ := by rfl
 
 end

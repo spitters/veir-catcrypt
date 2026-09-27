@@ -20,6 +20,10 @@ public import Veir.Dialects.RISCV_Stack.OpInfo
 public import Veir.Dialects.RV64.OpInfo
 public import Veir.Dialects.ModArith.OpInfo
 public import Veir.Dialects.Field.OpInfo
+public import Veir.Dialects.EllipticCurve.OpInfo
+public import Veir.Dialects.Poly.OpInfo
+public import Veir.Dialects.Ring.OpInfo
+public import Veir.Dialects.TensorExt.OpInfo
 public import Veir.Dialects.Datapath.OpInfo
 public import Veir.Dialects.Comb.OpInfo
 public import Veir.Dialects.HW.OpInfo

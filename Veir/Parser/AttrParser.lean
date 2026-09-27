@@ -867,6 +867,55 @@ def parseOptionalPrimeFieldType : AttrParserM (Option TypeAttr) := do
   return some (PrimeFieldType.mk modulus isMontgomery)
 
 /--
+  Parse an integer attribute whose type may be omitted, e.g. `4096 : i32` or `32`.
+  An untyped literal is an `i64` attribute, as MLIR's `parseAttribute` reads it.
+-/
+def parseIntegerAttrDefaultI64 (errorMsg : String) : AttrParserM IntegerAttr := do
+  let value ← parseInteger false true errorMsg
+  if ← parseOptionalPunctuation ":" then
+    let type ← parseIntegerType
+    return IntegerAttr.mk value type
+  return IntegerAttr.mk value (IntegerType.mk 64)
+
+/--
+  Parse a prime-ir quotient ring type, if present.
+  Its syntax is `!ring.rq<[q₀, …], N : iK[, iW][, eval]>`, e.g.
+  `!ring.rq<[12289, 40961], 8 : i32, i32, eval>`; the storage type defaults to `i64`
+  and the basis to `coeff` (prime-ir `RqType::parse`).
+-/
+def parseOptionalRqType : AttrParserM (Option TypeAttr) := do
+  let token ← peekToken
+  let .exclamationIdent := token.kind | return none
+  let input := (← getThe ParserState).input
+  let typeName := { token.slice with start := token.slice.start + 1 }.of input
+  if typeName ≠ "ring.rq".toByteArray then
+    return none
+  let _ ← consumeToken
+  parsePunctuation "<"
+  let moduli ← parseDelimitedList .square (parseInteger false true "ring modulus expected")
+  parsePunctuation ","
+  let ringDegree ← parseIntegerAttrDefaultI64 "ring degree expected"
+  let mut storageType := IntegerType.mk 64
+  let mut haveStorage := false
+  let mut domain := RingDomain.coeff
+  while ← parseOptionalPunctuation "," do
+    if let some intType ← parseOptionalIntegerType then
+      if haveStorage then
+        throwAtCurrentPos "expected a single integer residue storage type"
+      storageType := intType
+      haveStorage := true
+    else if ← parseOptionalKeyword "eval".toByteArray then
+      domain := .eval
+      break
+    else if ← parseOptionalKeyword "coeff".toByteArray then
+      domain := .coeff
+      break
+    else
+      throwAtCurrentPos "expected an integer storage type or a 'coeff' or 'eval' basis"
+  parsePunctuation ">"
+  return some (RqType.mk moduli ringDegree storageType domain)
+
+/--
   Parse an optional felt-type field-name annotation: `<"name">`.
 -/
 def parseOptionalFeltFieldName : AttrParserM (Option ByteArray) := do
@@ -1169,6 +1218,83 @@ partial def parseOptionalExtensionFieldType : AttrParserM (Option TypeAttr) := d
   return some (ExtensionFieldType.mk degree base.val nonResidue)
 
 /--
+  Parse a prime-ir elliptic curve attribute, if present.
+  Its syntax is `#elliptic_curve.sw<a, b, (Gx, Gy)> : F` or
+  `#elliptic_curve.te<a, d, (Gx, Gy)> : F`, e.g.
+  `#elliptic_curve.sw<0 : i32, 3 : i32, (1 : i32, 2 : i32)> : !field.pf<7 : i32>`.
+  The on-curve check prime-ir performs is not repeated here.
+-/
+partial def parseOptionalEllipticCurveAttr : AttrParserM (Option Attribute) := do
+  let token ← peekToken
+  let .hashIdent := token.kind | return none
+  let input := (← getThe ParserState).input
+  let attrName := { token.slice with start := token.slice.start + 1 }.of input
+  let form? : Option EllipticCurveForm :=
+    if attrName = "elliptic_curve.sw".toByteArray then some .sw
+    else if attrName = "elliptic_curve.te".toByteArray then some .te
+    else none
+  let some form := form? | return none
+  let _ ← consumeToken
+  parsePunctuation "<"
+  let a ← parseAttribute "elliptic curve coefficient expected"
+  parsePunctuation ","
+  let b ← parseAttribute "elliptic curve coefficient expected"
+  parsePunctuation ","
+  parsePunctuation "("
+  let gx ← parseAttribute "elliptic curve generator coordinate expected"
+  parsePunctuation ","
+  let gy ← parseAttribute "elliptic curve generator coordinate expected"
+  parsePunctuation ")"
+  parsePunctuation ">"
+  parsePunctuation ":"
+  let baseField ← parseType "elliptic curve base field type expected"
+  return some (EllipticCurveAttr.mk form baseField.val a b gx gy : Attribute)
+
+/--
+  Parse a prime-ir elliptic curve point type, if present.
+  Its syntax is `!elliptic_curve.<repr><#curve>` with `repr` one of `affine`,
+  `jacobian`, `xyzz` (over `#elliptic_curve.sw`) or `ed_affine`, `ed_extended`
+  (over `#elliptic_curve.te`).
+-/
+partial def parseOptionalEllipticCurvePointType : AttrParserM (Option TypeAttr) := do
+  let token ← peekToken
+  let .exclamationIdent := token.kind | return none
+  let input := (← getThe ParserState).input
+  let typeName := { token.slice with start := token.slice.start + 1 }.of input
+  let some repr := EllipticCurvePointRepr.all.find?
+      (fun r => typeName = ("elliptic_curve." ++ r.primeIrName).toByteArray)
+    | return none
+  let _ ← consumeToken
+  parsePunctuation "<"
+  let curveStart ← getPos
+  let curve ← parseAttribute "elliptic curve attribute expected"
+  let .ellipticCurveAttr curveAttr := curve
+    | throwAt curveStart "elliptic curve attribute expected"
+  if curveAttr.form ≠ repr.form then
+    throwAt curveStart
+      s!"!elliptic_curve.{repr.primeIrName} expects an #elliptic_curve.{repr.form.mnemonic} curve"
+  parsePunctuation ">"
+  return some (EllipticCurvePointType.mk repr curve)
+
+/--
+  Parse a prime-ir polynomial type, if present.
+  Its syntax is `!poly.polynomial<F, maxDegree>`, e.g. `!poly.polynomial<!field.pf<7 : i32>, 32>`.
+-/
+partial def parseOptionalPolyType : AttrParserM (Option TypeAttr) := do
+  let token ← peekToken
+  let .exclamationIdent := token.kind | return none
+  let input := (← getThe ParserState).input
+  let typeName := { token.slice with start := token.slice.start + 1 }.of input
+  if typeName ≠ "poly.polynomial".toByteArray then return none
+  let _ ← consumeToken
+  parsePunctuation "<"
+  let baseField ← parseType "polynomial base field type expected"
+  parsePunctuation ","
+  let maxDegree ← parseIntegerAttrDefaultI64 "polynomial maximum degree expected"
+  parsePunctuation ">"
+  return some (PolyType.mk baseField.val maxDegree)
+
+/--
   Parse an LLVM array type, if present.
   Its syntax is `!llvm.array<size x type>`,
   or (exclusively) the shorter form `array<size x type>` if the corresponding argument is set.
@@ -1405,6 +1531,12 @@ partial def parseOptionalType : AttrParserM (Option TypeAttr) := do
     return some primeFieldType
   if let some extensionFieldType ← parseOptionalExtensionFieldType then
     return some extensionFieldType
+  if let some pointType ← parseOptionalEllipticCurvePointType then
+    return some pointType
+  if let some polyType ← parseOptionalPolyType then
+    return some polyType
+  if let some rqType ← parseOptionalRqType then
+    return some rqType
   if let some feltType ← parseOptionalFeltType then
     return some feltType
   if let some cirIntType ← parseOptionalCirIntType then
@@ -1557,6 +1689,8 @@ partial def parseOptionalAttribute : AttrParserM (Option Attribute) := do
     return some cirIntAttr
   if let some cirBoolAttr ← parseOptionalCirBoolAttr then
     return some cirBoolAttr
+  if let some curveAttr ← parseOptionalEllipticCurveAttr then
+    return some curveAttr
   if let some dialectAttr ← parseOptionalDialectAttr then
     return some (← parseOptionalUnregisteredAttrType dialectAttr)
   else if let some locationAttr ← parseOptionalLocationAttr then
