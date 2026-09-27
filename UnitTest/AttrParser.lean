@@ -475,6 +475,29 @@ macro "#assert " e:term : command =>
 #assert expectErrorType "!mod_arith.int<17>" "Expected punctuation ':'" (some 17)
 #assert expectErrorType "!mod_arith.int<17 : x>" "integer or float type expected after ':' in numeric attribute" (some 20)
 
+/-! ## prime-ir ring, poly and elliptic curve types -/
+
+#assert expectSuccessType "!ring.rq<[12289, 40961], 8 : i32>"
+  (RqType.mk #[12289, 40961] (IntegerAttr.mk 8 (IntegerType.mk 32)) (IntegerType.mk 64) .coeff)
+#assert expectSuccessType "!ring.rq<[3329], 256 : i32, i16, eval>"
+  (RqType.mk #[3329] (IntegerAttr.mk 256 (IntegerType.mk 32)) (IntegerType.mk 16) .eval)
+#assert expectSuccessType "!poly.polynomial<!field.pf<7 : i32>, 32>"
+  (PolyType.mk (Attribute.primeFieldType (PrimeFieldType.mk (IntegerAttr.mk 7 (IntegerType.mk 32)) false))
+    (IntegerAttr.mk 32 (IntegerType.mk 64)))
+#assert expectSuccessType
+  "!elliptic_curve.affine<#elliptic_curve.sw<0 : i32, 3 : i32, (1 : i32, 2 : i32)> : !field.pf<7 : i32>>"
+  (EllipticCurvePointType.mk .affine
+    (Attribute.ellipticCurveAttr
+      (EllipticCurveAttr.mk .sw
+        (Attribute.primeFieldType (PrimeFieldType.mk (IntegerAttr.mk 7 (IntegerType.mk 32)) false))
+        (Attribute.integerAttr (IntegerAttr.mk 0 (IntegerType.mk 32)))
+        (Attribute.integerAttr (IntegerAttr.mk 3 (IntegerType.mk 32)))
+        (Attribute.integerAttr (IntegerAttr.mk 1 (IntegerType.mk 32)))
+        (Attribute.integerAttr (IntegerAttr.mk 2 (IntegerType.mk 32))))))
+#assert expectErrorType
+  "!elliptic_curve.ed_affine<#elliptic_curve.sw<0 : i32, 3 : i32, (1 : i32, 2 : i32)> : !field.pf<7 : i32>>"
+  "!elliptic_curve.ed_affine expects an #elliptic_curve.te curve" (some 26)
+
 /-! ## ClangIR types -/
 
 #assert expectSuccessType "!cir.int<s, 32>" (CirIntType.mk true 32)

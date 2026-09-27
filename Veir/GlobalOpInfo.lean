@@ -24,6 +24,10 @@ match opCode with
 | .rv64 op => Rv64.propertiesOf op
 | .mod_arith op => Mod_Arith.propertiesOf op
 | .field op => Field.propertiesOf op
+| .elliptic_curve op => Elliptic_Curve.propertiesOf op
+| .poly op => Poly.propertiesOf op
+| .ring op => Ring.propertiesOf op
+| .tensor_ext op => Tensor_Ext.propertiesOf op
 | .cf op => Cf.propertiesOf op
 | .comb op => Comb.propertiesOf op
 | .hw op => HW.propertiesOf op
@@ -60,6 +64,10 @@ def OpCode.getEffects (opCode : OpCode) (props : _propertiesOf opCode) : MemoryE
   | .rv64 op, props => Rv64.getEffects op props
   | .mod_arith op, props => Mod_Arith.getEffects op props
   | .field op, props => Field.getEffects op props
+  | .elliptic_curve op, props => Elliptic_Curve.getEffects op props
+  | .poly op, props => Poly.getEffects op props
+  | .ring op, props => Ring.getEffects op props
+  | .tensor_ext op, props => Tensor_Ext.getEffects op props
   | .cf op, props => Cf.getEffects op props
   | .comb op, props => Comb.getEffects op props
   | .hw op, props => HW.getEffects op props
@@ -94,6 +102,10 @@ def OpCode.tryFold (opCode : OpCode) (props : _propertiesOf opCode)
   | .rv64 op, props => HasOpInfo.tryFold op props resultTypes constantOperands
   | .mod_arith op, props => HasOpInfo.tryFold op props resultTypes constantOperands
   | .field op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .elliptic_curve op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .poly op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .ring op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .tensor_ext op, props => HasOpInfo.tryFold op props resultTypes constantOperands
   | .cf op, props => HasOpInfo.tryFold op props resultTypes constantOperands
   | .comb op, props => HasOpInfo.tryFold op props resultTypes constantOperands
   | .hw op, props => HasOpInfo.tryFold op props resultTypes constantOperands
@@ -128,6 +140,10 @@ def OpCode.getRegionKind (opCode : OpCode) (index : Nat) : RegionKind :=
   | .rv64 op => HasOpInfo.getRegionKind op index
   | .mod_arith op => HasOpInfo.getRegionKind op index
   | .field op => HasOpInfo.getRegionKind op index
+  | .elliptic_curve op => HasOpInfo.getRegionKind op index
+  | .poly op => HasOpInfo.getRegionKind op index
+  | .ring op => HasOpInfo.getRegionKind op index
+  | .tensor_ext op => HasOpInfo.getRegionKind op index
   | .cf op => HasOpInfo.getRegionKind op index
   | .comb op => HasOpInfo.getRegionKind op index
   | .hw op => HasOpInfo.getRegionKind op index
@@ -163,6 +179,10 @@ def OpCode.hasSSADominance (opCode : OpCode) (index : Nat) : Bool :=
   | .rv64 op => Rv64.hasSSADominance op index
   | .mod_arith op => Mod_Arith.hasSSADominance op index
   | .field op => Field.hasSSADominance op index
+  | .elliptic_curve op => Elliptic_Curve.hasSSADominance op index
+  | .poly op => Poly.hasSSADominance op index
+  | .ring op => Ring.hasSSADominance op index
+  | .tensor_ext op => Tensor_Ext.hasSSADominance op index
   | .cf op => Cf.hasSSADominance op index
   | .comb op => Comb.hasSSADominance op index
   | .hw op => HW.hasSSADominance op index
@@ -199,6 +219,10 @@ def OpCode.hasNoTerminator (opCode : OpCode) (index : Nat) : Bool :=
   | .rv64 op => HasOpInfo.hasNoTerminator op index
   | .mod_arith op => HasOpInfo.hasNoTerminator op index
   | .field op => HasOpInfo.hasNoTerminator op index
+  | .elliptic_curve op => HasOpInfo.hasNoTerminator op index
+  | .poly op => HasOpInfo.hasNoTerminator op index
+  | .ring op => HasOpInfo.hasNoTerminator op index
+  | .tensor_ext op => HasOpInfo.hasNoTerminator op index
   | .cf op => HasOpInfo.hasNoTerminator op index
   | .comb op => HasOpInfo.hasNoTerminator op index
   | .hw op => HasOpInfo.hasNoTerminator op index
@@ -231,6 +255,10 @@ def OpCode.isIsolatedFromAbove (opCode : OpCode) : Bool :=
   | .rv64 op => HasOpInfo.isIsolatedFromAbove op
   | .mod_arith op => HasOpInfo.isIsolatedFromAbove op
   | .field op => HasOpInfo.isIsolatedFromAbove op
+  | .elliptic_curve op => HasOpInfo.isIsolatedFromAbove op
+  | .poly op => HasOpInfo.isIsolatedFromAbove op
+  | .ring op => HasOpInfo.isIsolatedFromAbove op
+  | .tensor_ext op => HasOpInfo.isIsolatedFromAbove op
   | .cf op => HasOpInfo.isIsolatedFromAbove op
   | .comb op => HasOpInfo.isIsolatedFromAbove op
   | .hw op => HasOpInfo.isIsolatedFromAbove op
@@ -267,6 +295,10 @@ def OpCode.isTerminator (opCode : OpCode) : Bool :=
   | .rv64 op => HasOpInfo.isTerminator op
   | .mod_arith op => HasOpInfo.isTerminator op
   | .field op => HasOpInfo.isTerminator op
+  | .elliptic_curve op => HasOpInfo.isTerminator op
+  | .poly op => HasOpInfo.isTerminator op
+  | .ring op => HasOpInfo.isTerminator op
+  | .tensor_ext op => HasOpInfo.isTerminator op
   | .cf op => HasOpInfo.isTerminator op
   | .comb op => HasOpInfo.isTerminator op
   | .hw op => HasOpInfo.isTerminator op
@@ -306,6 +338,10 @@ def OpCode.isConstantLike (opCode : OpCode) : Bool :=
   | .rv64 op => Rv64.isConstantLike op
   | .mod_arith op => Mod_Arith.isConstantLike op
   | .field op => Field.isConstantLike op
+  | .elliptic_curve op => Elliptic_Curve.isConstantLike op
+  | .poly op => Poly.isConstantLike op
+  | .ring op => Ring.isConstantLike op
+  | .tensor_ext op => Tensor_Ext.isConstantLike op
   | .cf op => Cf.isConstantLike op
   | .comb op => Comb.isConstantLike op
   | .hw op => HW.isConstantLike op
@@ -341,6 +377,10 @@ def OpCode.propagatesPoison (opCode : OpCode) : Bool :=
   | .rv64 op => HasOpInfo.propagatesPoison op
   | .mod_arith op => HasOpInfo.propagatesPoison op
   | .field op => HasOpInfo.propagatesPoison op
+  | .elliptic_curve op => HasOpInfo.propagatesPoison op
+  | .poly op => HasOpInfo.propagatesPoison op
+  | .ring op => HasOpInfo.propagatesPoison op
+  | .tensor_ext op => HasOpInfo.propagatesPoison op
   | .cf op => HasOpInfo.propagatesPoison op
   | .comb op => HasOpInfo.propagatesPoison op
   | .hw op => HasOpInfo.propagatesPoison op
@@ -373,6 +413,10 @@ def Properties.fromAttrDict (opCode : OpCode) (attrDict : Std.HashMap ByteArray 
   | .rv64 op => Rv64.fromAttrDict op attrDict
   | .mod_arith op => Mod_Arith.fromAttrDict op attrDict
   | .field op => Field.fromAttrDict op attrDict
+  | .elliptic_curve op => Elliptic_Curve.fromAttrDict op attrDict
+  | .poly op => Poly.fromAttrDict op attrDict
+  | .ring op => Ring.fromAttrDict op attrDict
+  | .tensor_ext op => Tensor_Ext.fromAttrDict op attrDict
   | .cf op => Cf.fromAttrDict op attrDict
   | .comb op => Comb.fromAttrDict op attrDict
   | .hw op => HW.fromAttrDict op attrDict
@@ -409,6 +453,10 @@ def Properties.toAttrDict
   | .rv64 op, props => Rv64.toAttrDict op props
   | .mod_arith op, props => Mod_Arith.toAttrDict op props
   | .field op, props => Field.toAttrDict op props
+  | .elliptic_curve op, props => Elliptic_Curve.toAttrDict op props
+  | .poly op, props => Poly.toAttrDict op props
+  | .ring op, props => Ring.toAttrDict op props
+  | .tensor_ext op, props => Tensor_Ext.toAttrDict op props
   | .cf op, props => Cf.toAttrDict op props
   | .comb op, props => Comb.toAttrDict op props
   | .hw op, props => HW.toAttrDict op props
@@ -448,6 +496,10 @@ def OpCode.functionInterface? (opCode : OpCode) : Option (FunctionOpInterface (_
   | .rv64 op => HasOpInfo.functionInterface? op
   | .mod_arith op => HasOpInfo.functionInterface? op
   | .field op => HasOpInfo.functionInterface? op
+  | .elliptic_curve op => HasOpInfo.functionInterface? op
+  | .poly op => HasOpInfo.functionInterface? op
+  | .ring op => HasOpInfo.functionInterface? op
+  | .tensor_ext op => HasOpInfo.functionInterface? op
   | .cf op => HasOpInfo.functionInterface? op
   | .comb op => HasOpInfo.functionInterface? op
   | .hw op => HasOpInfo.functionInterface? op
@@ -485,6 +537,10 @@ def OpCode.verifyLocalInvariants (opCode : OpCode) (op : OperationPtr)
   | .llvm opType => Llvm.verifyLocalInvariants opType op ctx opIn
   | .mod_arith opType => Mod_Arith.verifyLocalInvariants opType op ctx opIn
   | .field opType => Field.verifyLocalInvariants opType op ctx opIn
+  | .elliptic_curve opType => Elliptic_Curve.verifyLocalInvariants opType op ctx opIn
+  | .poly opType => Poly.verifyLocalInvariants opType op ctx opIn
+  | .ring opType => Ring.verifyLocalInvariants opType op ctx opIn
+  | .tensor_ext opType => Tensor_Ext.verifyLocalInvariants opType op ctx opIn
   | .riscv opType => Riscv.verifyLocalInvariants opType op ctx opIn
   | .riscv_cf opType => Riscv_Cf.verifyLocalInvariants opType op ctx opIn
   | .riscv_stack opType => Riscv_Stack.verifyLocalInvariants opType op ctx opIn
@@ -539,7 +595,8 @@ def OpCode.materializeConstant (opCode : OpCode) (value : RuntimeValue)
     | .verif _
     | .func _ | .datapath _ | .pdl _ | .test _ | .cir _ | .io _ | .include _
     | .function _ | .seq _
-    | .catcrypt _ | .memref _ | .polynomial _ | .vector _ | .x86vector _ | .field _ => none
+    | .catcrypt _ | .memref _ | .polynomial _ | .vector _ | .x86vector _ | .field _
+    | .elliptic_curve _ | .poly _ | .ring _ | .tensor_ext _ => none
   guard materialized.fst.isConstantLike
   return materialized
 
@@ -565,6 +622,7 @@ def OpCode.isCommutative (opCode : OpCode) : Bool :=
   | .riscv .addw | .riscv .mulw
   | .mod_arith .add | .mod_arith .mul
   | .field .add | .field .mul
+  | .elliptic_curve .add | .ring .add | .ring .mul
   | .felt .add | .felt .mul
   | .felt .bit_and | .felt .bit_or | .felt .bit_xor
   | .cir .add | .cir .mul | .cir .and | .cir .or | .cir .xor | .cir .min | .cir .max => true
