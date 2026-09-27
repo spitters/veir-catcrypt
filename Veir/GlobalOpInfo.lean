@@ -38,6 +38,11 @@ match opCode with
 | .include op => LLZK.Include.propertiesOf op
 | .function op => LLZK.Function.propertiesOf op
 | .seq op => Seq.propertiesOf op
+| .catcrypt op => Catcrypt.propertiesOf op
+| .memref op => Memref.propertiesOf op
+| .polynomial op => Polynomial.propertiesOf op
+| .vector op => Vector.propertiesOf op
+| .x86vector op => X86vector.propertiesOf op
 
 /--
   What are the memory effects of an operation with this opcode and these
@@ -68,6 +73,11 @@ def OpCode.getEffects (opCode : OpCode) (props : _propertiesOf opCode) : MemoryE
   | .include op, props => LLZK.Include.getEffects op props
   | .function op, props => LLZK.Function.getEffects op props
   | .seq op, props => Seq.getEffects op props
+  | .catcrypt op, props => Catcrypt.getEffects op props
+  | .memref op, props => Memref.getEffects op props
+  | .polynomial op, props => Polynomial.getEffects op props
+  | .vector op, props => Vector.getEffects op props
+  | .x86vector op, props => X86vector.getEffects op props
 
 /-- Delegate folding to the operation's dialect-local `HasOpInfo` instance. -/
 def OpCode.tryFold (opCode : OpCode) (props : _propertiesOf opCode)
@@ -96,6 +106,11 @@ def OpCode.tryFold (opCode : OpCode) (props : _propertiesOf opCode)
   | .include op, props => HasOpInfo.tryFold op props resultTypes constantOperands
   | .function op, props => HasOpInfo.tryFold op props resultTypes constantOperands
   | .seq op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .catcrypt op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .memref op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .polynomial op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .vector op, props => HasOpInfo.tryFold op props resultTypes constantOperands
+  | .x86vector op, props => HasOpInfo.tryFold op props resultTypes constantOperands
 
 /--
   Return the kind of the region with the given index inside this operation.
@@ -124,6 +139,11 @@ def OpCode.getRegionKind (opCode : OpCode) (index : Nat) : RegionKind :=
   | .include op => HasOpInfo.getRegionKind op index
   | .function op => HasOpInfo.getRegionKind op index
   | .seq op => HasOpInfo.getRegionKind op index
+  | .catcrypt op => HasOpInfo.getRegionKind op index
+  | .memref op => HasOpInfo.getRegionKind op index
+  | .polynomial op => HasOpInfo.getRegionKind op index
+  | .vector op => HasOpInfo.getRegionKind op index
+  | .x86vector op => HasOpInfo.getRegionKind op index
 
 /--
   Whether definitions in the indexed region of this opcode must dominate
@@ -153,6 +173,11 @@ def OpCode.hasSSADominance (opCode : OpCode) (index : Nat) : Bool :=
   | .include op => LLZK.Include.hasSSADominance op index
   | .function op => LLZK.Function.hasSSADominance op index
   | .seq op => Seq.hasSSADominance op index
+  | .catcrypt op => Catcrypt.hasSSADominance op index
+  | .memref op => Memref.hasSSADominance op index
+  | .polynomial op => Polynomial.hasSSADominance op index
+  | .vector op => Vector.hasSSADominance op index
+  | .x86vector op => X86vector.hasSSADominance op index
 
 /--
   Whether the indexed region of this opcode is exempt from the requirement
@@ -183,6 +208,11 @@ def OpCode.hasNoTerminator (opCode : OpCode) (index : Nat) : Bool :=
   | .include op => HasOpInfo.hasNoTerminator op index
   | .function op => HasOpInfo.hasNoTerminator op index
   | .seq op => HasOpInfo.hasNoTerminator op index
+  | .catcrypt op => HasOpInfo.hasNoTerminator op index
+  | .memref op => HasOpInfo.hasNoTerminator op index
+  | .polynomial op => HasOpInfo.hasNoTerminator op index
+  | .vector op => HasOpInfo.hasNoTerminator op index
+  | .x86vector op => HasOpInfo.hasNoTerminator op index
 
 /-- Whether this opcode carries MLIR's `IsolatedFromAbove` trait. -/
 def OpCode.isIsolatedFromAbove (opCode : OpCode) : Bool :=
@@ -209,6 +239,11 @@ def OpCode.isIsolatedFromAbove (opCode : OpCode) : Bool :=
   | .include op => HasOpInfo.isIsolatedFromAbove op
   | .function op => HasOpInfo.isIsolatedFromAbove op
   | .seq op => HasOpInfo.isIsolatedFromAbove op
+  | .catcrypt op => HasOpInfo.isIsolatedFromAbove op
+  | .memref op => HasOpInfo.isIsolatedFromAbove op
+  | .polynomial op => HasOpInfo.isIsolatedFromAbove op
+  | .vector op => HasOpInfo.isIsolatedFromAbove op
+  | .x86vector op => HasOpInfo.isIsolatedFromAbove op
 
 /--
   Does this OpCode count as an MLIR basic block terminator? Dialects that do
@@ -239,6 +274,11 @@ def OpCode.isTerminator (opCode : OpCode) : Bool :=
   | .include op => HasOpInfo.isTerminator op
   | .function op => HasOpInfo.isTerminator op
   | .seq op => HasOpInfo.isTerminator op
+  | .catcrypt op => HasOpInfo.isTerminator op
+  | .memref op => HasOpInfo.isTerminator op
+  | .polynomial op => HasOpInfo.isTerminator op
+  | .vector op => HasOpInfo.isTerminator op
+  | .x86vector op => HasOpInfo.isTerminator op
 
 /--
   Does this `OpCode` materialize a literal constant value, i.e. an op
@@ -272,6 +312,11 @@ def OpCode.isConstantLike (opCode : OpCode) : Bool :=
   | .include op => LLZK.Include.isConstantLike op
   | .function op => LLZK.Function.isConstantLike op
   | .seq op => Seq.isConstantLike op
+  | .catcrypt op => Catcrypt.isConstantLike op
+  | .memref op => Memref.isConstantLike op
+  | .polynomial op => Polynomial.isConstantLike op
+  | .vector op => Vector.isConstantLike op
+  | .x86vector op => X86vector.isConstantLike op
 
 /--
   Does an operation with this opcode produce a wholly poisoned result whenever
@@ -301,6 +346,11 @@ def OpCode.propagatesPoison (opCode : OpCode) : Bool :=
   | .include op => HasOpInfo.propagatesPoison op
   | .function op => HasOpInfo.propagatesPoison op
   | .seq op => HasOpInfo.propagatesPoison op
+  | .catcrypt op => HasOpInfo.propagatesPoison op
+  | .memref op => HasOpInfo.propagatesPoison op
+  | .polynomial op => HasOpInfo.propagatesPoison op
+  | .vector op => HasOpInfo.propagatesPoison op
+  | .x86vector op => HasOpInfo.propagatesPoison op
 
 def Properties.fromAttrDict (opCode : OpCode) (attrDict : Std.HashMap ByteArray Attribute) :
     Except String (_propertiesOf opCode) :=
@@ -327,6 +377,11 @@ def Properties.fromAttrDict (opCode : OpCode) (attrDict : Std.HashMap ByteArray 
   | .include op => LLZK.Include.fromAttrDict op attrDict
   | .function op => LLZK.Function.fromAttrDict op attrDict
   | .seq op => Seq.fromAttrDict op attrDict
+  | .catcrypt op => Catcrypt.fromAttrDict op attrDict
+  | .memref op => Memref.fromAttrDict op attrDict
+  | .polynomial op => Polynomial.fromAttrDict op attrDict
+  | .vector op => Vector.fromAttrDict op attrDict
+  | .x86vector op => X86vector.fromAttrDict op attrDict
 
 /--
   Converts the properties of an operation into a dictionary of attributes.
@@ -357,6 +412,11 @@ def Properties.toAttrDict
   | .include op, props => LLZK.Include.toAttrDict op props
   | .function op, props => LLZK.Function.toAttrDict op props
   | .seq op, props => Seq.toAttrDict op props
+  | .catcrypt op, props => Catcrypt.toAttrDict op props
+  | .memref op, props => Memref.toAttrDict op props
+  | .polynomial op, props => Polynomial.toAttrDict op props
+  | .vector op, props => Vector.toAttrDict op props
+  | .x86vector op, props => X86vector.toAttrDict op props
 
 instance : IsOpCode OpCode where
   fromName := OpCode.fromName
@@ -390,6 +450,11 @@ def OpCode.functionInterface? (opCode : OpCode) : Option (FunctionOpInterface (_
   | .include op => HasOpInfo.functionInterface? op
   | .function op => HasOpInfo.functionInterface? op
   | .seq op => HasOpInfo.functionInterface? op
+  | .catcrypt op => HasOpInfo.functionInterface? op
+  | .memref op => HasOpInfo.functionInterface? op
+  | .polynomial op => HasOpInfo.functionInterface? op
+  | .vector op => HasOpInfo.functionInterface? op
+  | .x86vector op => HasOpInfo.functionInterface? op
 
 #generate_has_dialect_instances OpCode
 
@@ -419,6 +484,11 @@ def OpCode.verifyLocalInvariants (opCode : OpCode) (op : OperationPtr)
   | .include opType => LLZK.Include.verifyLocalInvariants opType op ctx opIn
   | .function opType => LLZK.Function.verifyLocalInvariants opType op ctx opIn
   | .seq opType => Seq.verifyLocalInvariants opType op ctx opIn
+  | .catcrypt opType => Catcrypt.verifyLocalInvariants opType op ctx opIn
+  | .memref opType => Memref.verifyLocalInvariants opType op ctx opIn
+  | .polynomial opType => Polynomial.verifyLocalInvariants opType op ctx opIn
+  | .vector opType => Vector.verifyLocalInvariants opType op ctx opIn
+  | .x86vector opType => X86vector.verifyLocalInvariants opType op ctx opIn
 
 instance : HasOpInfo OpCode where
   verifyLocalInvariants := OpCode.verifyLocalInvariants
@@ -454,7 +524,8 @@ def OpCode.materializeConstant (opCode : OpCode) (value : RuntimeValue)
     | .riscv_cf _ | .riscv_stack _ | .rv64 _ | .cf _ | .builtin _
     | .verif _
     | .func _ | .datapath _ | .pdl _ | .test _ | .cir _ | .io _ | .include _
-    | .function _ | .seq _ => none
+    | .function _ | .seq _
+    | .catcrypt _ | .memref _ | .polynomial _ | .vector _ | .x86vector _ => none
   guard materialized.fst.isConstantLike
   return materialized
 
