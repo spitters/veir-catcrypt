@@ -316,6 +316,8 @@ def parseOptionalNumericAttr : AttrParserM (Option Attribute) := do
   -- Determine the type after ':'.
   if let some integerType ← parseOptionalIntegerType then
     return some (IntegerAttr.mk (← integerValue) integerType : Attribute)
+  else if let some _ ← parseOptionalIndexType then
+    return some (IndexAttr.mk (← integerValue) : Attribute)
   else if let some floatType ← parseOptionalFloatType then
     return some (FloatAttr.mk floatType (← floatValue floatType) : Attribute)
   else if let some name ← parseOptionalPrefixedKeyword .exclamationIdent then
@@ -545,6 +547,10 @@ partial def parseOptionalDialectAttr : AttrParserM (Option Attribute) := do
     let (nsw, nuw) ← parseIntegerOverflowFlags
     return some (ArithIntegerOverflowFlagsAttr.mk nsw nuw : Attribute)
 
+  if dialectName = "llvm.overflow".toByteArray then do
+    let (nsw, nuw) ← parseIntegerOverflowFlags
+    return some (LLVMIntegerOverflowFlagsAttr.mk nsw nuw : Attribute)
+
   if let some (_, toAttr) := verbatimBodyAttrs.find? (fun (name, _) => dialectName == name) then
     parsePunctuation "<"
     let body ← parseUnregisteredAttrBody
@@ -711,6 +717,25 @@ partial def parseOptionalIoAddressType : AttrParserM (Option TypeAttr) := do
   return some Io.AddressType.mk
 
 /--
+  Parse the body `<p : iN>` or `<p : iN, b>` (with `b` one of `true`, `false`) shared by
+  `!mod_arith.int` and `!field.pf`, returning the modulus and the Montgomery flag.
+-/
+def parseModulusBody (errorMsg : String) : AttrParserM (IntegerAttr × Bool) := do
+  parsePunctuation "<"
+  let some modulus ← parseOptionalNumericAttr
+    | throwAtCurrentPos errorMsg
+  let some modulus := modulus.cast? IntegerAttr
+    | throwAtCurrentPos errorMsg
+  let mut isMontgomery := false
+  if ← parseOptionalPunctuation "," then
+    if ← parseOptionalKeyword "true".toByteArray then
+      isMontgomery := true
+    else
+      parseKeyword "false".toByteArray "expected 'true' or 'false' Montgomery flag"
+  parsePunctuation ">"
+  return (modulus, isMontgomery)
+
+/--
   Parse HEIR's modarith type, if present.
   Its syntax is `!mod_arith.int<{IntegerAttr}>`, e.g., `!mod_arith.int<17 : i32>`.
 -/
@@ -722,13 +747,23 @@ def parseOptionalModArithType : AttrParserM (Option TypeAttr) := do
   if typeName ≠ "mod_arith.int".toByteArray then
     return none
   let _ ← consumeToken
-  parsePunctuation "<"
-  let some modulus ← parseOptionalNumericAttr
-    | throwAtCurrentPos "modarith type modulus expected"
-  let some modulus := modulus.cast? IntegerAttr
-    | throwAtCurrentPos "modarith type modulus expected"
-  parsePunctuation ">"
-  return some (ModArithType.mk modulus)
+  let (modulus, isMontgomery) ← parseModulusBody "modarith type modulus expected"
+  return some (ModArithType.mk modulus isMontgomery)
+
+/--
+  Parse a prime-ir prime field type, if present.
+  Its syntax is `!field.pf<p : iN>` or `!field.pf<p : iN, true>`.
+-/
+def parseOptionalPrimeFieldType : AttrParserM (Option TypeAttr) := do
+  let token ← peekToken
+  let .exclamationIdent := token.kind | return none
+  let input := (← getThe ParserState).input
+  let typeName := { token.slice with start := token.slice.start + 1 }.of input
+  if typeName ≠ "field.pf".toByteArray then
+    return none
+  let _ ← consumeToken
+  let (modulus, isMontgomery) ← parseModulusBody "prime field modulus expected"
+  return some (PrimeFieldType.mk modulus isMontgomery)
 
 /--
   Parse an optional felt-type field-name annotation: `<"name">`.
@@ -967,6 +1002,69 @@ partial def parseOptionalVectorType : AttrParserM (Option TypeAttr) := do
   return some (VectorType.mk shape elementType)
 
 /--
+  Parse the static dimension list and element type of a shaped type body, after its `<`,
+  e.g. `2x4xi32` in `tensor<2x4xi32>`.
+-/
+partial def parseShapeAndElementType (what : String) : AttrParserM (Array Nat × TypeAttr) := do
+  let mut shape := #[]
+  while let some dim ← parseOptionalVectorDimension do
+    shape := shape.push dim
+    parseShapeSeparator
+  let elementType ← parseType s!"{what} element type expected"
+  return (shape, elementType)
+
+/--
+  Parse a builtin ranked tensor type with static dimensions, if present.
+  Its syntax is `tensor<dimension-list x element-type>`, e.g. `tensor<2x4xi32>`.
+-/
+partial def parseOptionalRankedTensorType : AttrParserM (Option TypeAttr) := do
+  if !(← parseOptionalKeyword "tensor".toByteArray) then
+    return none
+  parsePunctuation "<"
+  let (shape, elementType) ← parseShapeAndElementType "tensor"
+  parsePunctuation ">"
+  return some (RankedTensorType.mk shape elementType)
+
+/--
+  Parse a builtin memref type with static dimensions, if present.
+  Its syntax is `memref<dimension-list x element-type>` optionally followed by
+  `, layout` and/or `, memory-space` before the closing `>`; that suffix is kept verbatim.
+-/
+partial def parseOptionalMemRefType : AttrParserM (Option TypeAttr) := do
+  if !(← parseOptionalKeyword "memref".toByteArray) then
+    return none
+  parsePunctuation "<"
+  let (shape, elementType) ← parseShapeAndElementType "memref"
+  let mut rest := ""
+  if ← parseOptionalPunctuation "," then
+    rest ← parseUnregisteredAttrBody
+  parsePunctuation ">"
+  return some (MemRefType.mk shape elementType rest)
+
+/--
+  Parse a prime-ir extension field type, if present.
+  Its syntax is `!field.ef<Nx base, non-residue>`, e.g.
+  `!field.ef<2x!field.pf<7 : i32>, 6 : i32>` or
+  `!field.ef<3x!EF2, dense<[1, 1]> : tensor<2xi32>>`.
+-/
+partial def parseOptionalExtensionFieldType : AttrParserM (Option TypeAttr) := do
+  let token ← peekToken
+  let .exclamationIdent := token.kind | return none
+  let input := (← getThe ParserState).input
+  let typeName := { token.slice with start := token.slice.start + 1 }.of input
+  if typeName ≠ "field.ef".toByteArray then return none
+  let _ ← consumeToken
+  parsePunctuation "<"
+  let some degree ← parseOptionalVectorDimension
+    | throwAtCurrentPos "extension field degree expected"
+  parseShapeSeparator
+  let base ← parseType "extension field base type expected"
+  parsePunctuation ","
+  let nonResidue ← parseAttribute "extension field non-residue expected"
+  parsePunctuation ">"
+  return some (ExtensionFieldType.mk degree base.val nonResidue)
+
+/--
   Parse an LLVM array type, if present.
   Its syntax is `!llvm.array<size x type>`,
   or (exclusively) the shorter form `array<size x type>` if the corresponding argument is set.
@@ -1185,12 +1283,20 @@ partial def parseOptionalType : AttrParserM (Option TypeAttr) := do
     return some floatType
   if let some vectorType ← parseOptionalVectorType then
     return some vectorType
+  if let some tensorType ← parseOptionalRankedTensorType then
+    return some tensorType
+  if let some memrefType ← parseOptionalMemRefType then
+    return some memrefType
   if let some byteType ← parseOptionalByteType then
     return some byteType
   if let some registerType ← parseOptionalRegisterType then
     return some registerType
   if let some modArithType ← parseOptionalModArithType then
     return some modArithType
+  if let some primeFieldType ← parseOptionalPrimeFieldType then
+    return some primeFieldType
+  if let some extensionFieldType ← parseOptionalExtensionFieldType then
+    return some extensionFieldType
   if let some feltType ← parseOptionalFeltType then
     return some feltType
   if let some cirIntType ← parseOptionalCirIntType then

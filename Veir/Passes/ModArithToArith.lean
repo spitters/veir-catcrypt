@@ -229,7 +229,7 @@ def lowerModArithBinOp (modOp : Mod_Arith) (widen : Nat → Nat) (legalizeWidth 
     | .barrett => emitBarrettReduction
     | .full => emitFullReduction
   -- type setup
-  let .modArithType modArithType@⟨⟨modulus, storageType⟩⟩ := ((op.getResult 0 : ValuePtr).getType! rewriter.ctx.raw).val
+  let .modArithType modArithType@⟨⟨modulus, storageType⟩, false⟩ := ((op.getResult 0 : ValuePtr).getType! rewriter.ctx.raw).val
     | return rewriter
   let intermediateWidth := legalizeWidth (widen storageType.bitwidth)
   let intermediateType  := IntegerType.mk intermediateWidth
@@ -281,7 +281,7 @@ def lowerModArithConstantOp (legalizeWidth : Nat → Nat) (rewriter : PatternRew
     | return rewriter
   let c := props.value.value
   -- type setup
-  let .modArithType modArithType@⟨⟨q, storageType⟩⟩ := ((op.getResult 0 : ValuePtr).getType! rewriter.ctx.raw).val
+  let .modArithType modArithType@⟨⟨q, storageType⟩, false⟩ := ((op.getResult 0 : ValuePtr).getType! rewriter.ctx.raw).val
     | return rewriter
   -- actual lowering:
   let ip := InsertPoint.before op

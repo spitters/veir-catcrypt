@@ -26,6 +26,8 @@ def NswNuwProperties.fromAttrDict (attrDict : Std.HashMap ByteArray Attribute) :
         .error s!"expected 'overflowFlags' to be an integer attribute of bitwidth 32, but got i{flags.type.bitwidth}"
       else
         .ok flags.value
+    | some (.llvmIntegerOverflowFlagsAttr flags) =>
+      .ok (((if flags.nsw then 1 else 0) + (if flags.nuw then 2 else 0) : Int))
     | some attr => .error s!"expected 'overflowFlags' to be an optional integer attribute, but got {attr}"
     | none => .ok 0
 

@@ -11,25 +11,46 @@ namespace Veir
 
 public section
 
+/--
+The `mod_arith` dialect. `add`, `sub`, `mul` and `constant` are the ops HEIR and
+prime-ir share, with the same generic form; the remaining ones are prime-ir's
+(`ModArithOps.td` at fractalyze/prime-ir `fc4261887`).
+-/
 @[opcodes]
 inductive Mod_Arith where
 | add
 | constant
 | mul
 | sub
+| bitcast
+| mont_reduce
+| to_mont
+| from_mont
+| cmp
+| negate
+| square
+| mont_square
+| inverse
+| double
+| mont_inverse
+| mont_mul
+| barrett_mul
 deriving Inhabited, Repr, Hashable, DecidableEq
 
 @[expose, properties_of]
 def Mod_Arith.propertiesOf (op : Mod_Arith) : Type :=
 match op with
 | .constant => ModArithConstantProperties
-| .add | .sub | .mul => Unit
+| .cmp => CmpPredicateProperties
+| .add | .sub | .mul | .bitcast | .mont_reduce | .to_mont | .from_mont | .negate | .square
+| .mont_square | .inverse | .double | .mont_inverse | .mont_mul | .barrett_mul => Unit
 
 def Mod_Arith.fromAttrDict
     (op : Mod_Arith) (attrDict : Std.HashMap ByteArray Attribute) :
     Except String (Mod_Arith.propertiesOf op) := by
   cases op
   case constant => exact ModArithConstantProperties.fromAttrDict attrDict
+  case cmp => exact CmpPredicateProperties.fromAttrDict "mod_arith.cmp" attrDict
   all_goals exact .ok ()
 
 def Mod_Arith.toAttrDict
@@ -39,6 +60,7 @@ def Mod_Arith.toAttrDict
   | .constant =>
     (Std.HashMap.emptyWithCapacity 2).insert
       "value".toUTF8 (Attribute.integerAttr props.value)
+  | .cmp => CmpPredicateProperties.toAttrDict props
   | _ => Std.HashMap.emptyWithCapacity 0
 
 @[get_effects]
@@ -114,6 +136,140 @@ def OperationPtr.verifyModArithConstantOp {OpInfo : Type} [IsOpCode OpInfo]
     throw s!"{instrName}: constant value {value} does not fit in storage type 'i{bw}'."
 
 /--
+The element type of a shaped type (`tensor`, `vector`, `memref`), or the type
+itself when it is not shaped.
+-/
+def Attribute.shapedElementType (ty : Attribute) : Attribute :=
+  match ty with
+  | .rankedTensorType t => t.elementType
+  | .vectorType t => t.elementType
+  | .memrefType t => t.elementType
+  | t => t
+
+/-- The shape of a shaped type, or `none` for a scalar type. -/
+def Attribute.shapedShape (ty : Attribute) : Option (Array Nat) :=
+  match ty with
+  | .rankedTensorType t => some t.shape
+  | .vectorType t => some t.shape
+  | .memrefType t => some t.shape
+  | _ => none
+
+def ModArithType.verifyWellFormed (type : ModArithType) (msg : String) :
+    Except String ModArithType := do
+  let modulus := type.modulus.value
+  let bitWidth := type.modulus.type.bitwidth
+  if modulus ≤ 0 then
+    throw s!"{msg} but found invalid ModArithType type: modulus {modulus} must be positive."
+  if modulus ≥ (2 ^ bitWidth) then
+    throw s!"{msg} but found invalid ModArithType type: modulus {modulus} does not fit into the underlying storage type 'i{bitWidth}'."
+  pure type
+
+/--
+Check that `ty` is `ModArithLike`: a `!mod_arith.int` or a shaped container of one.
+Returns the element type.
+-/
+def Attribute.verifyModArithLike (ty : Attribute) (msg : String) : Except String ModArithType :=
+  match ty.shapedElementType with
+  | .modArithType type => type.verifyWellFormed msg
+  | _ => throw s!"{msg} but found {ty} instead."
+
+/-- The storage width of an integer or `mod_arith` element type. -/
+def Attribute.modArithOrIntegerWidth? (ty : Attribute) : Option Nat :=
+  match ty.shapedElementType with
+  | .modArithType type => some type.bitwidth
+  | .integerType type => some type.bitwidth
+  | _ => none
+
+def OperationPtr.verifyModArithLikeUnaryOp {OpInfo : Type} [IsOpCode OpInfo]
+    (op : OperationPtr) (ctx : WfIRContext OpInfo)
+    (opIn : op.InBounds ctx.raw) : Except String PUnit := do
+  op.verifyPlainOpCounts ctx opIn 1 1
+  let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
+  let operandType := (op.getOperand! ctx.raw 0).getType! ctx.raw
+  op.verifyResultTypeMatches ctx operandType
+    s!"{instrName}: Expected result type to match operand type"
+  let _ ← operandType.val.verifyModArithLike s!"{instrName}: Expected mod_arith-like operand"
+
+def OperationPtr.verifyModArithLikeBinOp {OpInfo : Type} [IsOpCode OpInfo]
+    (op : OperationPtr) (ctx : WfIRContext OpInfo)
+    (opIn : op.InBounds ctx.raw) : Except String PUnit := do
+  op.verifyPlainOpCounts ctx opIn 2 1
+  let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
+  let operandType ← op.verifyOperandTypesMatch ctx 0 1
+    s!"{instrName}: Expected operands to have the same type"
+  op.verifyResultTypeMatches ctx operandType
+    s!"{instrName}: Expected result type to match operand type"
+  let _ ← operandType.val.verifyModArithLike s!"{instrName}: Expected mod_arith-like operands"
+
+/--
+`to_mont` (`toMont = true`) and `from_mont`: the operand and result have the same
+modulus and shape, and the result flips the Montgomery flag of the operand.
+-/
+def OperationPtr.verifyModArithMontConversion {OpInfo : Type} [IsOpCode OpInfo]
+    (op : OperationPtr) (ctx : WfIRContext OpInfo)
+    (opIn : op.InBounds ctx.raw) (toMont : Bool) : Except String PUnit := do
+  op.verifyPlainOpCounts ctx opIn 1 1
+  let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
+  let inType := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
+  let outType := ((op.getResult 0).get! ctx.raw).type.val
+  let input ← inType.verifyModArithLike s!"{instrName}: Expected mod_arith-like operand"
+  let output ← outType.verifyModArithLike s!"{instrName}: Expected mod_arith-like result"
+  if input.modulus ≠ output.modulus then
+    throw s!"{instrName}: Expected operand and result to have the same modulus"
+  if inType.shapedShape ≠ outType.shapedShape then
+    throw s!"{instrName}: Expected operand and result to have the same shape"
+  if input.isMontgomery = toMont ∨ output.isMontgomery ≠ toMont then
+    throw s!"{instrName}: Expected the result to flip the operand's Montgomery flag"
+
+/--
+`bitcast`: each side is `ModArithLike` or a signless integer (container), with equal
+storage width and shape.
+-/
+def OperationPtr.verifyModArithBitcast {OpInfo : Type} [IsOpCode OpInfo]
+    (op : OperationPtr) (ctx : WfIRContext OpInfo)
+    (opIn : op.InBounds ctx.raw) : Except String PUnit := do
+  op.verifyPlainOpCounts ctx opIn 1 1
+  let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
+  let inType := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
+  let outType := ((op.getResult 0).get! ctx.raw).type.val
+  let some inWidth := inType.modArithOrIntegerWidth?
+    | throw s!"{instrName}: Expected a mod_arith-like or integer operand"
+  let some outWidth := outType.modArithOrIntegerWidth?
+    | throw s!"{instrName}: Expected a mod_arith-like or integer result"
+  if inWidth ≠ outWidth then
+    throw s!"{instrName}: Expected operand and result storage widths to agree"
+  if inType.shapedShape ≠ outType.shapedShape then
+    throw s!"{instrName}: Expected operand and result to have the same shape"
+
+/-- `mont_reduce`: two integer operands of one type, and a `ModArithLike` result. -/
+def OperationPtr.verifyModArithMontReduce {OpInfo : Type} [IsOpCode OpInfo]
+    (op : OperationPtr) (ctx : WfIRContext OpInfo)
+    (opIn : op.InBounds ctx.raw) : Except String PUnit := do
+  op.verifyPlainOpCounts ctx opIn 2 1
+  let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
+  let operandType ← op.verifyOperandTypesMatch ctx 0 1
+    s!"{instrName}: Expected operands to have the same type"
+  let .integerType _ := operandType.val.shapedElementType
+    | throw s!"{instrName}: Expected integer operands"
+  let _ ← ((op.getResult 0).get! ctx.raw).type.val.verifyModArithLike
+    s!"{instrName}: Expected mod_arith-like result"
+
+/-- `cmp`: two `ModArithLike` operands of one type and an `i1` (container) result. -/
+def OperationPtr.verifyModArithCmp {OpInfo : Type} [IsOpCode OpInfo]
+    (op : OperationPtr) (ctx : WfIRContext OpInfo)
+    (opIn : op.InBounds ctx.raw) : Except String PUnit := do
+  op.verifyPlainOpCounts ctx opIn 2 1
+  let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
+  let operandType ← op.verifyOperandTypesMatch ctx 0 1
+    s!"{instrName}: Expected operands to have the same type"
+  let _ ← operandType.val.verifyModArithLike s!"{instrName}: Expected mod_arith-like operands"
+  let resultType := ((op.getResult 0).get! ctx.raw).type.val
+  let .integerType ⟨1⟩ := resultType.shapedElementType
+    | throw s!"{instrName}: Expected i1 result"
+  if resultType.shapedShape ≠ operandType.val.shapedShape then
+    throw s!"{instrName}: Expected result to have the shape of the operands"
+
+/--
 Verify the local invariants of a `mod_arith` operation in any operation-info
 type containing the `mod_arith` dialect.
 -/
@@ -127,6 +283,15 @@ def Mod_Arith.verifyLocalInvariants {OpInfo : Type} [IsOpCode OpInfo]
   | .constant => do
     op.verifyModArithConstantOp ctx opIn
     pure ()
+  | .negate | .square | .mont_square | .inverse | .double | .mont_inverse =>
+    op.verifyModArithLikeUnaryOp ctx opIn
+  | .mont_mul | .barrett_mul =>
+    op.verifyModArithLikeBinOp ctx opIn
+  | .to_mont => op.verifyModArithMontConversion ctx opIn true
+  | .from_mont => op.verifyModArithMontConversion ctx opIn false
+  | .bitcast => op.verifyModArithBitcast ctx opIn
+  | .mont_reduce => op.verifyModArithMontReduce ctx opIn
+  | .cmp => op.verifyModArithCmp ctx opIn
 
 instance : HasOpInfo Mod_Arith where
   verifyLocalInvariants := Mod_Arith.verifyLocalInvariants

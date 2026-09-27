@@ -252,12 +252,12 @@ def ModArith.interpretOp' (opType : Veir.Mod_Arith) (properties : propertiesOf o
   match opType with
   | .constant => do
     let some resType := resultTypes[0]? | none
-    let .modArithType ⟨⟨mod, ⟨bw⟩⟩⟩ := resType.val | none
+    let .modArithType ⟨⟨mod, ⟨bw⟩⟩, false⟩ := resType.val | none
     let res := LLVM.Int.constant bw (properties.value.value % mod)
     return (#[RuntimeValue.int bw res], none)
   | .add => do
     let some resType := resultTypes[0]? | none
-    let .modArithType ⟨⟨mod, ⟨bw⟩⟩⟩ := resType.val | none
+    let .modArithType ⟨⟨mod, ⟨bw⟩⟩, false⟩ := resType.val | none
     let some (lhs, rhs) := ModArith.binaryOperands bw operands | none
     let res :=
       match lhs.toNat?, rhs.toNat? with
@@ -266,7 +266,7 @@ def ModArith.interpretOp' (opType : Veir.Mod_Arith) (properties : propertiesOf o
     return (#[RuntimeValue.int bw res], none)
   | .sub => do
     let some resType := resultTypes[0]? | none
-    let .modArithType ⟨⟨mod, ⟨bw⟩⟩⟩ := resType.val | none
+    let .modArithType ⟨⟨mod, ⟨bw⟩⟩, false⟩ := resType.val | none
     let some (lhs, rhs) := ModArith.binaryOperands bw operands | none
     let res :=
       match lhs.toNat?, rhs.toNat? with
@@ -275,13 +275,15 @@ def ModArith.interpretOp' (opType : Veir.Mod_Arith) (properties : propertiesOf o
     return (#[RuntimeValue.int bw res], none)
   | .mul => do
     let some resType := resultTypes[0]? | none
-    let .modArithType ⟨⟨mod, ⟨bw⟩⟩⟩ := resType.val | none
+    let .modArithType ⟨⟨mod, ⟨bw⟩⟩, false⟩ := resType.val | none
     let some (lhs, rhs) := ModArith.binaryOperands bw operands | none
     let res :=
       match lhs.toNat?, rhs.toNat? with
       | some lhs, some rhs => LLVM.Int.constant bw ((lhs * rhs) % mod)
       | _, _ => LLVM.Int.poison
     return (#[RuntimeValue.int bw res], none)
+  -- The prime-ir ops and Montgomery-flagged types have no semantics yet.
+  | _ => none
 
 
 /-- Match two felt operands whose field type is exactly `fieldType`. -/

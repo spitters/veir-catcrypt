@@ -307,10 +307,39 @@ structure FlatSymbolRefAttr where
 deriving Inhabited, Repr, DecidableEq, Hashable
 
 /--
-  The `!mod_arith.int` type from HEIR's modarith dialect.
+  The `!mod_arith.int` type, shared by HEIR's and prime-ir's `mod_arith` dialects.
+  It is spelled `!mod_arith.int<p : iN>`, or `!mod_arith.int<p : iN, true>` when
+  `isMontgomery` is set (prime-ir `ModArithTypes.td`). HEIR's form is the case
+  `isMontgomery = false`.
 -/
 structure ModArithType where
   modulus : IntegerAttr
+  isMontgomery : Bool := false
+deriving Inhabited, Repr, DecidableEq, Hashable
+
+/--
+  The prime-ir `!field.pf<p : iN>` type (prime field element), with the same
+  parameters and spelling as `ModArithType`, including the optional `, true`
+  Montgomery flag.
+-/
+structure PrimeFieldType where
+  modulus : IntegerAttr
+  isMontgomery : Bool := false
+deriving Inhabited, Repr, DecidableEq, Hashable
+
+/--
+  An integer literal of the builtin `index` type, e.g. `4 : index`.
+-/
+structure IndexAttr where
+  value : Int
+deriving Inhabited, Repr, DecidableEq, Hashable
+
+/--
+  LLVM integer overflow flags attribute, e.g. `#llvm.overflow<nsw, nuw>`.
+-/
+structure LLVMIntegerOverflowFlagsAttr where
+  nsw : Bool
+  nuw : Bool
 deriving Inhabited, Repr, DecidableEq, Hashable
 
 /-- The bitwidth of the storage type of a `!mod_arith.int`. -/
@@ -517,6 +546,37 @@ structure VectorType where
   elementType : Attribute
 
 /--
+  A builtin ranked tensor type with static dimensions, e.g. `tensor<2x4xi32>`,
+  represented by shape `#[2, 4]` and element type `i32`. Dynamic dimensions and
+  encodings are not supported.
+-/
+structure RankedTensorType where
+  shape : Array Nat
+  elementType : Attribute
+
+/--
+  A builtin memref type with static dimensions, e.g. `memref<4x8xi32>`. The
+  optional layout and memory space, e.g. `strided<[8, 1]>, 1` in
+  `memref<4x8xi32, strided<[8, 1]>, 1>`, are kept verbatim in `layoutAndSpace`
+  (empty when absent).
+-/
+structure MemRefType where
+  shape : Array Nat
+  elementType : Attribute
+  layoutAndSpace : String
+
+/--
+  The prime-ir extension field type `!field.ef<Nx B, ξ>`: a degree-`N`
+  extension of the base field `B` (a `!field.pf` or `!field.ef`), with
+  non-residue `ξ` given as an integer attribute or a dense elements attribute
+  (prime-ir `FieldTypes.td`).
+-/
+structure ExtensionFieldType where
+  degree : Nat
+  base : Attribute
+  nonResidue : Attribute
+
+/--
   The signature of a function, consisting of an array of input attributes
   and an array of output attributes.
 -/
@@ -718,22 +778,46 @@ inductive Attribute
 | matchOptionalType (type : Match.OptionalType)
 /-- CIRCT seq clock type -/
 | seqClockType (type : Seq.ClockType)
+/-- Builtin ranked tensor type -/
+| rankedTensorType (type : RankedTensorType)
+/-- Builtin memref type -/
+| memrefType (type : MemRefType)
+/-- Builtin `index`-typed integer attribute -/
+| indexAttr (attr : IndexAttr)
+/-- LLVM integer overflow flags attribute -/
+| llvmIntegerOverflowFlagsAttr (attr : LLVMIntegerOverflowFlagsAttr)
+/-- prime-ir prime field type -/
+| primeFieldType (type : PrimeFieldType)
+/-- prime-ir extension field type -/
+| extensionFieldType (type : ExtensionFieldType)
 deriving Inhabited
 
 end
 
 /- Derive Repr and Hashable instances for the mutual group. -/
 derive_mutual_repr for
-  VectorType, FunctionType, LLVMFunctionType, CirFuncType,
+  VectorType, RankedTensorType, MemRefType, ExtensionFieldType,
+  FunctionType, LLVMFunctionType, CirFuncType,
   ArrayAttr, DictionaryAttr, LLVM.ArrayType, Match.OptionalType,
   UnregisteredAttr, Attribute
 derive_mutual_hashable for
-  VectorType, FunctionType, LLVMFunctionType, CirFuncType,
+  VectorType, RankedTensorType, MemRefType, ExtensionFieldType,
+  FunctionType, LLVMFunctionType, CirFuncType,
   ArrayAttr, DictionaryAttr, LLVM.ArrayType, Match.OptionalType,
   UnregisteredAttr, Attribute
 
 instance : Inhabited VectorType where
   default := { shape := #[], elementType := .integerType (IntegerType.mk 0) }
+
+instance : Inhabited RankedTensorType where
+  default := { shape := #[], elementType := .integerType (IntegerType.mk 0) }
+
+instance : Inhabited MemRefType where
+  default := { shape := #[], elementType := .integerType (IntegerType.mk 0), layoutAndSpace := "" }
+
+instance : Inhabited ExtensionFieldType where
+  default := { degree := 2, base := .integerType (IntegerType.mk 0),
+               nonResidue := .integerType (IntegerType.mk 0) }
 
 instance : Coe FunctionType LLVMFunctionType where
   coe := .mk
@@ -769,6 +853,22 @@ theorem FunctionType.sizeOf_elems_outputs {ft : FunctionType} (hx : x ∈ ft.out
 theorem VectorType.sizeOf_elementType {t : VectorType} :
     sizeOf t.elementType < sizeOf t := by
   grind [cases VectorType]
+
+theorem RankedTensorType.sizeOf_elementType {t : RankedTensorType} :
+    sizeOf t.elementType < sizeOf t := by
+  grind [cases RankedTensorType]
+
+theorem MemRefType.sizeOf_elementType {t : MemRefType} :
+    sizeOf t.elementType < sizeOf t := by
+  grind [cases MemRefType]
+
+theorem ExtensionFieldType.sizeOf_base {t : ExtensionFieldType} :
+    sizeOf t.base < sizeOf t := by
+  grind [cases ExtensionFieldType]
+
+theorem ExtensionFieldType.sizeOf_nonResidue {t : ExtensionFieldType} :
+    sizeOf t.nonResidue < sizeOf t := by
+  grind [cases ExtensionFieldType]
 
 theorem LLVMFunctionType.sizeOf_functionType {ft : LLVMFunctionType} :
     sizeOf ft.functionType < sizeOf ft := by
@@ -835,6 +935,9 @@ def integerOverflowFlagsString (dialect : String) (nsw nuw : Bool) : String :=
 
 instance : ToString ArithIntegerOverflowFlagsAttr where
   toString attr := integerOverflowFlagsString "arith" attr.nsw attr.nuw
+
+instance : ToString LLVMIntegerOverflowFlagsAttr where
+  toString attr := integerOverflowFlagsString "llvm" attr.nsw attr.nuw
 
 instance : ToString CConvAttr where
   toString attr := s!"#llvm.cconv<{attr.value}>"
@@ -927,8 +1030,18 @@ instance : ToString DenseElementsAttr where
 instance : ToString FlatSymbolRefAttr where
   toString attr := attr.value
 
+/-- The body `<p : iN>` or `<p : iN, true>` shared by `!mod_arith.int` and `!field.pf`. -/
+def modulusBodyString (modulus : IntegerAttr) (isMontgomery : Bool) : String :=
+  if isMontgomery then s!"<{modulus}, true>" else s!"<{modulus}>"
+
 instance : ToString ModArithType where
-  toString type := s!"!mod_arith.int<{type.modulus}>"
+  toString type := "!mod_arith.int" ++ modulusBodyString type.modulus type.isMontgomery
+
+instance : ToString PrimeFieldType where
+  toString type := "!field.pf" ++ modulusBodyString type.modulus type.isMontgomery
+
+instance : ToString IndexAttr where
+  toString attr := s!"{attr.value} : index"
 
 instance : ToString FeltType where
   toString type := match type.fieldName with
@@ -1015,6 +1128,20 @@ partial def VectorType.toString (type : VectorType) : String :=
   let shape := String.intercalate "x" (type.shape.toList.map ToString.toString)
   let shape := if shape.isEmpty then "" else shape ++ "x"
   s!"vector<{shape}{Attribute.toString type.elementType}>"
+
+partial def RankedTensorType.toString (type : RankedTensorType) : String :=
+  let shape := String.intercalate "x" (type.shape.toList.map ToString.toString)
+  let shape := if shape.isEmpty then "" else shape ++ "x"
+  s!"tensor<{shape}{Attribute.toString type.elementType}>"
+
+partial def MemRefType.toString (type : MemRefType) : String :=
+  let shape := String.intercalate "x" (type.shape.toList.map ToString.toString)
+  let shape := if shape.isEmpty then "" else shape ++ "x"
+  let rest := if type.layoutAndSpace.isEmpty then "" else ", " ++ type.layoutAndSpace
+  s!"memref<{shape}{Attribute.toString type.elementType}{rest}>"
+
+partial def ExtensionFieldType.toString (type : ExtensionFieldType) : String :=
+  s!"!field.ef<{type.degree}x{Attribute.toString type.base}, {Attribute.toString type.nonResidue}>"
 
 partial def ArrayAttr.toString (attr : ArrayAttr) : String :=
   let elems := String.intercalate ", " (attr.value.toList.map Attribute.toString)
@@ -1145,6 +1272,12 @@ partial def Attribute.toString (attr : Attribute) : String :=
   | .pdlTypeType type => ToString.toString type
   | .matchOptionalType type => type.toString
   | .seqClockType type => ToString.toString type
+  | .rankedTensorType type => type.toString
+  | .memrefType type => type.toString
+  | .indexAttr attr => ToString.toString attr
+  | .llvmIntegerOverflowFlagsAttr attr => ToString.toString attr
+  | .primeFieldType type => ToString.toString type
+  | .extensionFieldType type => type.toString
 
 end
 
@@ -1153,6 +1286,15 @@ instance : ToString Attribute where
 
 instance : ToString VectorType where
   toString := VectorType.toString
+
+instance : ToString RankedTensorType where
+  toString := RankedTensorType.toString
+
+instance : ToString MemRefType where
+  toString := MemRefType.toString
+
+instance : ToString ExtensionFieldType where
+  toString := ExtensionFieldType.toString
 
 instance : ToString FunctionType where
   toString := FunctionType.toString
@@ -1411,6 +1553,42 @@ def VectorType.decEq (type1 type2 : VectorType) : Decidable (type1 = type2) :=
 termination_by sizeOf type1
 decreasing_by exact VectorType.sizeOf_elementType
 
+def RankedTensorType.decEq (type1 type2 : RankedTensorType) : Decidable (type1 = type2) :=
+  if hshape : type1.shape = type2.shape then
+    match Attribute.decEq type1.elementType type2.elementType with
+    | isTrue _ => isTrue (by grind [cases RankedTensorType])
+    | isFalse _ => isFalse (by grind)
+  else
+    isFalse (by grind)
+termination_by sizeOf type1
+decreasing_by exact RankedTensorType.sizeOf_elementType
+
+def MemRefType.decEq (type1 type2 : MemRefType) : Decidable (type1 = type2) :=
+  if hshape : type1.shape = type2.shape ∧ type1.layoutAndSpace = type2.layoutAndSpace then
+    match Attribute.decEq type1.elementType type2.elementType with
+    | isTrue _ => isTrue (by grind [cases MemRefType])
+    | isFalse _ => isFalse (by grind)
+  else
+    isFalse (by grind)
+termination_by sizeOf type1
+decreasing_by exact MemRefType.sizeOf_elementType
+
+def ExtensionFieldType.decEq (type1 type2 : ExtensionFieldType) : Decidable (type1 = type2) :=
+  if hdeg : type1.degree = type2.degree then
+    match Attribute.decEq type1.base type2.base with
+    | isTrue _ =>
+      match Attribute.decEq type1.nonResidue type2.nonResidue with
+      | isTrue _ => isTrue (by grind [cases ExtensionFieldType])
+      | isFalse _ => isFalse (by grind)
+    | isFalse _ => isFalse (by grind)
+  else
+    isFalse (by grind)
+termination_by sizeOf type1
+decreasing_by
+  all_goals first
+    | exact ExtensionFieldType.sizeOf_base
+    | exact ExtensionFieldType.sizeOf_nonResidue
+
 def FunctionType.decEq (type1 type2 : FunctionType) : Decidable (type1 = type2) :=
   let inputs1 := type1.inputs
   let outputs1 := type1.outputs
@@ -1632,11 +1810,26 @@ def Attribute.decEq (attr1 attr2 : @& Attribute) : Decidable (attr1 = attr2) := 
     exact IsAttr.decEqAgainst x attr2 (Match.OptionalType.decEq x)
   case seqClockType x =>
     exact IsAttr.decEqAgainst x attr2 (decEq x)
+  case rankedTensorType x =>
+    exact IsAttr.decEqAgainst x attr2 (RankedTensorType.decEq x)
+  case memrefType x =>
+    exact IsAttr.decEqAgainst x attr2 (MemRefType.decEq x)
+  case indexAttr x =>
+    exact IsAttr.decEqAgainst x attr2 (decEq x)
+  case llvmIntegerOverflowFlagsAttr x =>
+    exact IsAttr.decEqAgainst x attr2 (decEq x)
+  case primeFieldType x =>
+    exact IsAttr.decEqAgainst x attr2 (decEq x)
+  case extensionFieldType x =>
+    exact IsAttr.decEqAgainst x attr2 (ExtensionFieldType.decEq x)
 termination_by sizeOf attr1
 end
 
 instance : DecidableEq Attribute := Attribute.decEq
 instance : DecidableEq VectorType := VectorType.decEq
+instance : DecidableEq RankedTensorType := RankedTensorType.decEq
+instance : DecidableEq MemRefType := MemRefType.decEq
+instance : DecidableEq ExtensionFieldType := ExtensionFieldType.decEq
 instance : DecidableEq FunctionType := FunctionType.decEq
 instance : DecidableEq LLVMFunctionType := LLVMFunctionType.decEq
 instance : DecidableEq CirFuncType := CirFuncType.decEq
@@ -1714,6 +1907,12 @@ def isType (attr : Attribute) : Bool :=
   | .pdlTypeType _ => true
   | .matchOptionalType _ => true
   | .seqClockType _ => true
+  | .rankedTensorType _ => true
+  | .memrefType _ => true
+  | .indexAttr _ => false
+  | .llvmIntegerOverflowFlagsAttr _ => false
+  | .primeFieldType _ => true
+  | .extensionFieldType _ => true
 
 /--
   Returns the size, in bits, that an LLVM type would use if stored to memory.
@@ -1811,6 +2010,19 @@ theorem isType_pdlValueType type : (pdlValueType type).isType = true := by rfl
 theorem isType_pdlTypeType type : (pdlTypeType type).isType = true := by rfl
 @[simp, grind =]
 theorem isType_seqClockType type : (seqClockType type).isType = true := by rfl
+@[simp, grind =]
+theorem isType_rankedTensorType type : (rankedTensorType type).isType = true := by rfl
+@[simp, grind =]
+theorem isType_memrefType type : (memrefType type).isType = true := by rfl
+@[simp, grind =]
+theorem isType_indexAttr attr : (indexAttr attr).isType = false := by rfl
+@[simp, grind =]
+theorem isType_llvmIntegerOverflowFlagsAttr attr :
+    (llvmIntegerOverflowFlagsAttr attr).isType = false := by rfl
+@[simp, grind =]
+theorem isType_primeFieldType type : (primeFieldType type).isType = true := by rfl
+@[simp, grind =]
+theorem isType_extensionFieldType type : (extensionFieldType type).isType = true := by rfl
 
 end Attribute
 
@@ -2072,6 +2284,22 @@ instance : IsTypeAttr TypeAttr where
 
 instance : IsTypeAttr Seq.ClockType where
   coe type := Attribute.asType (.seqClockType type) (by rfl)
+  coe_eq_inject _ := by rfl
+
+instance : IsTypeAttr RankedTensorType where
+  coe type := Attribute.asType (.rankedTensorType type) (by rfl)
+  coe_eq_inject _ := by rfl
+
+instance : IsTypeAttr MemRefType where
+  coe type := Attribute.asType (.memrefType type) (by rfl)
+  coe_eq_inject _ := by rfl
+
+instance : IsTypeAttr PrimeFieldType where
+  coe type := Attribute.asType (.primeFieldType type) (by rfl)
+  coe_eq_inject _ := by rfl
+
+instance : IsTypeAttr ExtensionFieldType where
+  coe type := Attribute.asType (.extensionFieldType type) (by rfl)
   coe_eq_inject _ := by rfl
 
 end

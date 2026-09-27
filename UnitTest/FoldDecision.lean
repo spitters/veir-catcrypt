@@ -92,7 +92,7 @@ info: "ok"
 #eval! testRiscvConstantMaterialization
 
 private def testModArithConstantMaterialization : String := Id.run do
-  let type : TypeAttr := ModArithType.mk (IntegerAttr.mk 251 (IntegerType.mk 8))
+  let type : TypeAttr := ModArithType.mk (IntegerAttr.mk 251 (IntegerType.mk 8)) false
   match (.mod_arith .add : OpCode).materializeConstant (.int 8 (.val 250)) type with
   | some ⟨.mod_arith .constant, props⟩ =>
     if props.value ≠ IntegerAttr.mk 250 (IntegerType.mk 8) then
