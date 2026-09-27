@@ -32,6 +32,11 @@ public import Veir.Dialects.LLZK.Include.OpInfo
 public import Veir.Dialects.LLZK.Function.OpInfo
 public import Veir.Dialects.Cir.OpInfo
 public import Veir.Dialects.Seq.OpInfo
+public import Veir.Dialects.Catcrypt.OpInfo
+public import Veir.Dialects.Memref.OpInfo
+public import Veir.Dialects.Polynomial.OpInfo
+public import Veir.Dialects.Vector.OpInfo
+public import Veir.Dialects.X86vector.OpInfo
 
 open Std
 
