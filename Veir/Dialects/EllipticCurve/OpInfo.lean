@@ -107,7 +107,7 @@ def Attribute.verifyPointLike (ty : Attribute) (msg : String) :
 
 /-- `i1`, or a shaped `i1` container of the shape of `like`. -/
 def Attribute.verifyBoolLikeOfShape (ty like : Attribute) (msg : String) : Except String PUnit := do
-  let .integerType ⟨1⟩ := ty.shapedElementType
+  let .integerType ⟨1, _⟩ := ty.shapedElementType
     | throw s!"{msg}: Expected i1 result"
   if ty.shapedShape ≠ like.shapedShape then
     throw s!"{msg}: Expected result to have the shape of the operands"
@@ -287,7 +287,7 @@ def OperationPtr.verifyEllipticCurvePairingCheck {OpInfo : Type} [IsOpCode OpInf
       | throw s!"{instrName}: Expected affine points"
   if g1.shape ≠ g2.shape then
     throw s!"{instrName}: Expected G1 and G2 tensors of the same length"
-  let .integerType ⟨1⟩ := ((op.getResult 0).getType! ctx.raw).val
+  let .integerType ⟨1, _⟩ := ((op.getResult 0).getType! ctx.raw).val
     | throw s!"{instrName}: Expected i1 result"
 
 /--

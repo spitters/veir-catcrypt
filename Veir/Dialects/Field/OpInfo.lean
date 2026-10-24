@@ -184,7 +184,7 @@ def OperationPtr.verifyFieldCmp {OpInfo : Type} [IsOpCode OpInfo]
     s!"{instrName}: Expected operands to have the same type"
   let _ ← operandType.val.verifyFieldLike s!"{instrName}: Expected field-like operands"
   let resultType := ((op.getResult 0).getType! ctx.raw).val
-  let .integerType ⟨1⟩ := resultType.shapedElementType
+  let .integerType ⟨1, _⟩ := resultType.shapedElementType
     | throw s!"{instrName}: Expected i1 result"
   if resultType.shapedShape ≠ operandType.val.shapedShape then
     throw s!"{instrName}: Expected result to have the shape of the operands"
