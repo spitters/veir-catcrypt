@@ -144,7 +144,7 @@ def OperationPtr.verifyFieldBinOp {OpInfo : Type} [IsOpCode OpInfo]
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let lhs := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
   let rhs := ((op.getOperand! ctx.raw 1).getType! ctx.raw).val
-  let result := ((op.getResult 0).get! ctx.raw).type.val
+  let result := ((op.getResult 0).getType! ctx.raw).val
   let _ ← lhs.verifyFieldLike s!"{instrName}: Expected field-like lhs"
   let _ ← rhs.verifyFieldLike s!"{instrName}: Expected field-like rhs"
   if lhs = rhs then
@@ -164,7 +164,7 @@ def OperationPtr.verifyFieldConstant {OpInfo : Type} [IsOpCode OpInfo]
     (opIn : op.InBounds ctx.raw) : Except String PUnit := do
   op.verifyPlainOpCounts ctx opIn 0 1
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
-  let resultType := ((op.getResult 0).get! ctx.raw).type.val
+  let resultType := ((op.getResult 0).getType! ctx.raw).val
   let element ← resultType.verifyFieldLike s!"{instrName}: Expected field-like result"
   match (op.getProperties! ctx.raw Field.constant).value, element, resultType.shapedShape with
   | .integerAttr value, .primeFieldType pf, none =>
@@ -183,7 +183,7 @@ def OperationPtr.verifyFieldCmp {OpInfo : Type} [IsOpCode OpInfo]
   let operandType ← op.verifyOperandTypesMatch ctx 0 1
     s!"{instrName}: Expected operands to have the same type"
   let _ ← operandType.val.verifyFieldLike s!"{instrName}: Expected field-like operands"
-  let resultType := ((op.getResult 0).get! ctx.raw).type.val
+  let resultType := ((op.getResult 0).getType! ctx.raw).val
   let .integerType ⟨1⟩ := resultType.shapedElementType
     | throw s!"{instrName}: Expected i1 result"
   if resultType.shapedShape ≠ operandType.val.shapedShape then
@@ -199,7 +199,7 @@ def OperationPtr.verifyFieldMontConversion {OpInfo : Type} [IsOpCode OpInfo]
   op.verifyPlainOpCounts ctx opIn 1 1
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let inType := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
-  let outType := ((op.getResult 0).get! ctx.raw).type.val
+  let outType := ((op.getResult 0).getType! ctx.raw).val
   let input ← inType.verifyFieldLike s!"{instrName}: Expected field-like operand"
   let output ← outType.verifyFieldLike s!"{instrName}: Expected field-like result"
   if inType.shapedShape ≠ outType.shapedShape then
@@ -246,7 +246,7 @@ def OperationPtr.verifyFieldExtFromCoeffs {OpInfo : Type} [IsOpCode OpInfo]
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   if op.getNumResults ctx.raw opIn ≠ 1 then
     throw s!"{instrName}: Expected 1 result(s)"
-  let .extensionFieldType ef := ((op.getResult 0).get! ctx.raw).type.val
+  let .extensionFieldType ef := ((op.getResult 0).getType! ctx.raw).val
     | throw s!"{instrName}: Expected an extension field result"
   op.verifyPlainOpCounts ctx opIn ef.degree 1
 

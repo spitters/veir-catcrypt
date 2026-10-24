@@ -215,7 +215,7 @@ def OperationPtr.verifyModArithMontConversion {OpInfo : Type} [IsOpCode OpInfo]
   op.verifyPlainOpCounts ctx opIn 1 1
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let inType := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
-  let outType := ((op.getResult 0).get! ctx.raw).type.val
+  let outType := ((op.getResult 0).getType! ctx.raw).val
   let input ← inType.verifyModArithLike s!"{instrName}: Expected mod_arith-like operand"
   let output ← outType.verifyModArithLike s!"{instrName}: Expected mod_arith-like result"
   if input.modulus ≠ output.modulus then
@@ -235,7 +235,7 @@ def OperationPtr.verifyModArithBitcast {OpInfo : Type} [IsOpCode OpInfo]
   op.verifyPlainOpCounts ctx opIn 1 1
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let inType := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
-  let outType := ((op.getResult 0).get! ctx.raw).type.val
+  let outType := ((op.getResult 0).getType! ctx.raw).val
   let some inWidth := inType.modArithOrIntegerWidth?
     | throw s!"{instrName}: Expected a mod_arith-like or integer operand"
   let some outWidth := outType.modArithOrIntegerWidth?
@@ -255,7 +255,7 @@ def OperationPtr.verifyModArithMontReduce {OpInfo : Type} [IsOpCode OpInfo]
     s!"{instrName}: Expected operands to have the same type"
   let .integerType _ := operandType.val.shapedElementType
     | throw s!"{instrName}: Expected integer operands"
-  let _ ← ((op.getResult 0).get! ctx.raw).type.val.verifyModArithLike
+  let _ ← ((op.getResult 0).getType! ctx.raw).val.verifyModArithLike
     s!"{instrName}: Expected mod_arith-like result"
 
 /-- `cmp`: two `ModArithLike` operands of one type and an `i1` (container) result. -/
@@ -267,7 +267,7 @@ def OperationPtr.verifyModArithCmp {OpInfo : Type} [IsOpCode OpInfo]
   let operandType ← op.verifyOperandTypesMatch ctx 0 1
     s!"{instrName}: Expected operands to have the same type"
   let _ ← operandType.val.verifyModArithLike s!"{instrName}: Expected mod_arith-like operands"
-  let resultType := ((op.getResult 0).get! ctx.raw).type.val
+  let resultType := ((op.getResult 0).getType! ctx.raw).val
   let .integerType ⟨1⟩ := resultType.shapedElementType
     | throw s!"{instrName}: Expected i1 result"
   if resultType.shapedShape ≠ operandType.val.shapedShape then

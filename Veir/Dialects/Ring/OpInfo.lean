@@ -121,7 +121,7 @@ def OperationPtr.verifyRingResidueTensor {OpInfo : Type} [IsOpCode OpInfo]
   op.verifyPlainOpCounts ctx opIn 1 1
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let input := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
-  let output := ((op.getResult 0).get! ctx.raw).type.val
+  let output := ((op.getResult 0).getType! ctx.raw).val
   let (ringTy, tensorTy) := if fromTensor then (output, input) else (input, output)
   let ring ← ringTy.verifyRqType s!"{instrName}: Expected a !ring.rq type"
   let .rankedTensorType tensor := tensorTy
@@ -144,7 +144,7 @@ def OperationPtr.verifyRingLimbs {OpInfo : Type} [IsOpCode OpInfo]
     if fromLimbs then do
       if op.getNumResults ctx.raw opIn ≠ 1 then
         throw s!"{instrName}: Expected 1 result(s)"
-      pure ((op.getResult 0).get! ctx.raw).type.val
+      pure ((op.getResult 0).getType! ctx.raw).val
     else do
       if op.getNumOperands ctx.raw opIn ≠ 1 then
         throw s!"{instrName}: Expected 1 operand(s)"
@@ -159,7 +159,7 @@ def OperationPtr.verifyRingLimbs {OpInfo : Type} [IsOpCode OpInfo]
     else do
       op.verifyPlainOpCounts ctx opIn 1 numLimbs
       pure ((List.range numLimbs).toArray.map fun i =>
-        ((op.getResult i).get! ctx.raw).type.val)
+        ((op.getResult i).getType! ctx.raw).val)
   for i in [0:numLimbs] do
     let limbTy := limbs[i]!
     let .rankedTensorType tensor := limbTy
@@ -187,7 +187,7 @@ def OperationPtr.verifyRingCrossLimb {OpInfo : Type} [IsOpCode OpInfo]
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let input ← ((op.getOperand! ctx.raw 0).getType! ctx.raw).val.verifyRqType
     s!"{instrName}: Expected a !ring.rq operand"
-  let output ← ((op.getResult 0).get! ctx.raw).type.val.verifyRqType
+  let output ← ((op.getResult 0).getType! ctx.raw).val.verifyRqType
     s!"{instrName}: Expected a !ring.rq result"
   if input.ringDegree ≠ output.ringDegree then
     throw s!"{instrName}: input and output rings must share the degree N"

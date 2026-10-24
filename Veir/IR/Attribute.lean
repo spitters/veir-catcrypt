@@ -462,7 +462,7 @@ deriving Inhabited, Repr, DecidableEq, Hashable
 structure RqType where
   moduli : Array Int
   ringDegree : IntegerAttr
-  storageType : IntegerType := IntegerType.mk 64
+  storageType : IntegerType := IntegerType.signless 64
   domain : RingDomain := .coeff
 deriving Inhabited, Repr, DecidableEq, Hashable
 
@@ -1003,16 +1003,16 @@ instance : Inhabited ExtensionFieldType where
                nonResidue := .integerType (IntegerType.signless 0) }
 
 instance : Inhabited EllipticCurveAttr where
-  default := { form := .sw, baseField := .integerType (IntegerType.mk 0),
-               a := .integerType (IntegerType.mk 0), b := .integerType (IntegerType.mk 0),
-               gx := .integerType (IntegerType.mk 0), gy := .integerType (IntegerType.mk 0) }
+  default := { form := .sw, baseField := .integerType (IntegerType.signless 0),
+               a := .integerType (IntegerType.signless 0), b := .integerType (IntegerType.signless 0),
+               gx := .integerType (IntegerType.signless 0), gy := .integerType (IntegerType.signless 0) }
 
 instance : Inhabited EllipticCurvePointType where
-  default := { repr := .affine, curve := .integerType (IntegerType.mk 0) }
+  default := { repr := .affine, curve := .integerType (IntegerType.signless 0) }
 
 instance : Inhabited PolyType where
-  default := { baseField := .integerType (IntegerType.mk 0),
-               maxDegree := IntegerAttr.mk 0 (IntegerType.mk 64) }
+  default := { baseField := .integerType (IntegerType.signless 0),
+               maxDegree := IntegerAttr.mk 0 (IntegerType.signless 64) }
 
 instance : Coe FunctionType LLVMFunctionType where
   coe := .mk
@@ -2678,33 +2678,19 @@ instance : IsTypeAttr TypeAttr where
 @[simp, grind norm]
 theorem TypeAttr.of_typeAttr (type : TypeAttr) : TypeAttr.of TypeAttr type = type := by rfl
 
-instance : IsTypeAttr RankedTensorType where
-  coe type := Attribute.asType (.rankedTensorType type) (by rfl)
-  coe_eq_inject _ := by rfl
+type_attribute_instance RankedTensorType => Attribute.rankedTensorType
 
-instance : IsTypeAttr MemRefType where
-  coe type := Attribute.asType (.memrefType type) (by rfl)
-  coe_eq_inject _ := by rfl
+type_attribute_instance MemRefType => Attribute.memrefType
 
-instance : IsTypeAttr PrimeFieldType where
-  coe type := Attribute.asType (.primeFieldType type) (by rfl)
-  coe_eq_inject _ := by rfl
+type_attribute_instance PrimeFieldType => Attribute.primeFieldType
 
-instance : IsTypeAttr ExtensionFieldType where
-  coe type := Attribute.asType (.extensionFieldType type) (by rfl)
-  coe_eq_inject _ := by rfl
+type_attribute_instance ExtensionFieldType => Attribute.extensionFieldType
 
-instance : IsTypeAttr EllipticCurvePointType where
-  coe type := Attribute.asType (.ellipticCurvePointType type) (by rfl)
-  coe_eq_inject _ := by rfl
+type_attribute_instance EllipticCurvePointType => Attribute.ellipticCurvePointType
 
-instance : IsTypeAttr PolyType where
-  coe type := Attribute.asType (.polyType type) (by rfl)
-  coe_eq_inject _ := by rfl
+type_attribute_instance PolyType => Attribute.polyType
 
-instance : IsTypeAttr RqType where
-  coe type := Attribute.asType (.rqType type) (by rfl)
-  coe_eq_inject _ := by rfl
+type_attribute_instance RqType => Attribute.rqType
 
 end
 end Veir

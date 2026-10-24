@@ -66,7 +66,7 @@ def OperationPtr.verifyPolyTensorBridge {OpInfo : Type} [IsOpCode OpInfo]
   op.verifyPlainOpCounts ctx opIn 1 1
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let input := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
-  let output := ((op.getResult 0).get! ctx.raw).type.val
+  let output := ((op.getResult 0).getType! ctx.raw).val
   let (polyTy, tensorTy) := if toTensor then (input, output) else (output, input)
   let .polyType poly := polyTy
     | throw s!"{instrName}: Expected a polynomial type but found {polyTy} instead."

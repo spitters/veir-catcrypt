@@ -875,7 +875,7 @@ def parseIntegerAttrDefaultI64 (errorMsg : String) : AttrParserM IntegerAttr := 
   if ← parseOptionalPunctuation ":" then
     let type ← parseIntegerType
     return IntegerAttr.mk value type
-  return IntegerAttr.mk value (IntegerType.mk 64)
+  return IntegerAttr.mk value (IntegerType.signless 64)
 
 /--
   Parse a prime-ir quotient ring type, if present.
@@ -895,7 +895,7 @@ def parseOptionalRqType : AttrParserM (Option TypeAttr) := do
   let moduli ← parseDelimitedList .square (parseInteger false true "ring modulus expected")
   parsePunctuation ","
   let ringDegree ← parseIntegerAttrDefaultI64 "ring degree expected"
-  let mut storageType := IntegerType.mk 64
+  let mut storageType := IntegerType.signless 64
   let mut haveStorage := false
   let mut domain := RingDomain.coeff
   while ← parseOptionalPunctuation "," do

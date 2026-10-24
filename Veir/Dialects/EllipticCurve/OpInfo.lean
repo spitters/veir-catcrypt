@@ -124,7 +124,7 @@ def OperationPtr.verifyEllipticCurveBinOp {OpInfo : Type} [IsOpCode OpInfo]
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let lhs := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
   let rhs := ((op.getOperand! ctx.raw 1).getType! ctx.raw).val
-  let result := ((op.getResult 0).get! ctx.raw).type.val
+  let result := ((op.getResult 0).getType! ctx.raw).val
   let lhsPoint ← lhs.verifyPointLike s!"{instrName}: Expected point-like lhs"
   let rhsPoint ← rhs.verifyPointLike s!"{instrName}: Expected point-like rhs"
   let resultPoint ← result.verifyPointLike s!"{instrName}: Expected point-like result"
@@ -143,7 +143,7 @@ def OperationPtr.verifyEllipticCurvePointConversion {OpInfo : Type} [IsOpCode Op
   op.verifyPlainOpCounts ctx opIn 1 1
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let input := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
-  let output := ((op.getResult 0).get! ctx.raw).type.val
+  let output := ((op.getResult 0).getType! ctx.raw).val
   let inPoint ← input.verifyPointLike s!"{instrName}: Expected point-like operand"
   let outPoint ← output.verifyPointLike s!"{instrName}: Expected point-like result"
   if inPoint.curve ≠ outPoint.curve then
@@ -171,7 +171,7 @@ def OperationPtr.verifyEllipticCurveConstant {OpInfo : Type} [IsOpCode OpInfo]
     (opIn : op.InBounds ctx.raw) : Except String PUnit := do
   op.verifyPlainOpCounts ctx opIn 0 1
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
-  let resultType := ((op.getResult 0).get! ctx.raw).type.val
+  let resultType := ((op.getResult 0).getType! ctx.raw).val
   let point ← resultType.verifyPointLike s!"{instrName}: Expected point-like result"
   let numPoints := (resultType.shapedShape.getD #[]).foldl (· * ·) 1
   let coords := (op.getProperties! ctx.raw Elliptic_Curve.constant).coords.value
@@ -194,7 +194,7 @@ def OperationPtr.verifyEllipticCurveCoords {OpInfo : Type} [IsOpCode OpInfo]
   if fromCoords then
     if op.getNumResults ctx.raw opIn ≠ 1 then
       throw s!"{instrName}: Expected 1 result(s)"
-    let point ← ((op.getResult 0).get! ctx.raw).type.val.verifyPointLike
+    let point ← ((op.getResult 0).getType! ctx.raw).val.verifyPointLike
       s!"{instrName}: Expected point-like result"
     op.verifyPlainOpCounts ctx opIn point.repr.numCoords 1
   else
@@ -212,7 +212,7 @@ def OperationPtr.verifyEllipticCurveIsZero {OpInfo : Type} [IsOpCode OpInfo]
   let instrName := String.fromUTF8! (IsOpCode.name (op.getOpType ctx.raw opIn))
   let operandType := ((op.getOperand! ctx.raw 0).getType! ctx.raw).val
   let _ ← operandType.verifyPointLike s!"{instrName}: Expected point-like operand"
-  ((op.getResult 0).get! ctx.raw).type.val.verifyBoolLikeOfShape operandType instrName
+  ((op.getResult 0).getType! ctx.raw).val.verifyBoolLikeOfShape operandType instrName
 
 /-- `cmp`: two point-like operands of the same type and an `i1`-like result of their shape. -/
 def OperationPtr.verifyEllipticCurveCmp {OpInfo : Type} [IsOpCode OpInfo]
@@ -223,7 +223,7 @@ def OperationPtr.verifyEllipticCurveCmp {OpInfo : Type} [IsOpCode OpInfo]
   let operandType ← op.verifyOperandTypesMatch ctx 0 1
     s!"{instrName}: Expected operands to have the same type"
   let _ ← operandType.val.verifyPointLike s!"{instrName}: Expected point-like operands"
-  ((op.getResult 0).get! ctx.raw).type.val.verifyBoolLikeOfShape operandType.val instrName
+  ((op.getResult 0).getType! ctx.raw).val.verifyBoolLikeOfShape operandType.val instrName
 
 /--
 `scalar_mul`: a prime-field-like scalar, a point-like operand, and a point-like
@@ -238,7 +238,7 @@ def OperationPtr.verifyEllipticCurveScalarMul {OpInfo : Type} [IsOpCode OpInfo]
   let .primeFieldType _ := scalar.shapedElementType
     | throw s!"{instrName}: Expected a prime-field-like scalar but found {scalar} instead."
   let pointType := ((op.getOperand! ctx.raw 1).getType! ctx.raw).val
-  let result := ((op.getResult 0).get! ctx.raw).type.val
+  let result := ((op.getResult 0).getType! ctx.raw).val
   let point ← pointType.verifyPointLike s!"{instrName}: Expected point-like operand"
   let resultPoint ← result.verifyPointLike s!"{instrName}: Expected point-like result"
   if point.curve ≠ resultPoint.curve then
@@ -262,7 +262,7 @@ def OperationPtr.verifyEllipticCurveMSM {OpInfo : Type} [IsOpCode OpInfo]
   let point ← points.elementType.verifyPointLike s!"{instrName}: Expected point elements"
   if scalars.shape ≠ points.shape then
     throw s!"{instrName}: Expected scalars and points of the same shape"
-  let .ellipticCurvePointType output := ((op.getResult 0).get! ctx.raw).type.val
+  let .ellipticCurvePointType output := ((op.getResult 0).getType! ctx.raw).val
     | throw s!"{instrName}: Expected a point result"
   if output.curve ≠ point.curve then
     throw s!"{instrName}: Expected the result on the points' curve"
@@ -287,7 +287,7 @@ def OperationPtr.verifyEllipticCurvePairingCheck {OpInfo : Type} [IsOpCode OpInf
       | throw s!"{instrName}: Expected affine points"
   if g1.shape ≠ g2.shape then
     throw s!"{instrName}: Expected G1 and G2 tensors of the same length"
-  let .integerType ⟨1⟩ := ((op.getResult 0).get! ctx.raw).type.val
+  let .integerType ⟨1⟩ := ((op.getResult 0).getType! ctx.raw).val
     | throw s!"{instrName}: Expected i1 result"
 
 /--
