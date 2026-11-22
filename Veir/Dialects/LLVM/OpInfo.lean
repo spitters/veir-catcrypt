@@ -1656,7 +1656,7 @@ def Llvm.interpretOp' (opType : Veir.Llvm) (properties : propertiesOf opType)
     let [.int _ (.val count)] := operands.toList | none
     /- `alloca T, N` reserves `N` strides of `T`, as in LLVM. -/
     let size ← layout.getTypeAllocSize properties.elem_type.val
-    let (mem, addr) ← mem.alloc (← memorySize (size * count.toNat))
+    let (mem, addr) ← mem.alloc (← memorySize (size * count.toNat)) (some mem.depth)
     return (#[.addr (.val addr)], mem, none)
   | .load => do
     let [.addr addr] := operands.toList | none

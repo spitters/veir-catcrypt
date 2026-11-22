@@ -21,6 +21,13 @@ structure MemoryObject where
   /-- The physical address of the first byte of the object. -/
   base : UInt64
   size : Nat
+  /-- Whether the object may be accessed; the objects of a returned frame are dead. -/
+  live : Bool := true
+  /-- The call depth of the `alloca` that made the object; `none` for a heap, global or
+      function object. -/
+  frame : Option Nat := none
+  /-- The symbol of a global or function object. -/
+  symbol : Option String := none
 
 /-- Whether the `size` bytes at `addr` lie inside `obj`. -/
 def MemoryObject.holds (obj : MemoryObject) (addr : UInt64) (size : Nat) : Bool :=
@@ -48,12 +55,16 @@ structure MemoryState where
   objects : Array MemoryObject
   /-- The object of each global and function, by its symbol, such as `@g`. -/
   globals : Std.HashMap String Nat := {}
+  /-- Allocation fails when an object would end past this address (with its guard byte). -/
+  heapLimit : Nat := 2 ^ 64
+  /-- The current call depth: the frame of an `alloca`. -/
+  depth : Nat := 0
 
 /--
   Object 0 is the null object at address 0. It holds no bytes, so every access
   through a null pointer is out of bounds.
 -/
-def MemoryState.empty : MemoryState := { bytes := {}, objects := #[⟨0, 0⟩] }
+def MemoryState.empty : MemoryState := { bytes := {}, objects := #[{ base := 0, size := 0 }] }
 
 /-- The byte at `addr`. -/
 def MemoryState.byte (mem : MemoryState) (addr : UInt64) : MemoryByte :=
@@ -132,17 +143,33 @@ def memorySize (n : Nat) : Interp UInt64 :=
   execute this program. A failing source is refined by anything and a
   failing target refines nothing, so such a run is never really compared.
 -/
-def MemoryState.alloc (mem : MemoryState) (size : UInt64) : Interp (MemoryState × Pointer) :=
+def MemoryState.alloc (mem : MemoryState) (size : UInt64) (frame : Option Nat := none) :
+    Interp (MemoryState × Pointer) :=
   let base := mem.nextBase
-  if base + size.toNat + 1 > 2 ^ 64 then Interp.fail none else
-  return ({ mem with objects := mem.objects.push ⟨base.toUInt64, size.toNat⟩ },
+  if base + size.toNat + 1 > 2 ^ 64 ∨ base + size.toNat + 1 > mem.heapLimit then Interp.fail none else
+  return ({ mem with objects := mem.objects.push { base := base.toUInt64, size := size.toNat, frame } },
     ⟨mem.objects.size, base.toUInt64⟩)
+
+/-- The symbol whose global or function object `p` points to the start of, if any. -/
+def MemoryState.globalAt? (mem : MemoryState) (p : Pointer) : Option String := do
+  let obj ← mem.objects[p.object]?
+  if p.address = obj.base then obj.symbol else none
+
+/-- Kill the objects of frame `d + 1` and return to depth `d`: the return of a function
+    entered at depth `d`. -/
+def MemoryState.popFrame (mem : MemoryState) (d : Nat) : MemoryState :=
+  { mem with
+    objects := mem.objects.map fun o => if o.frame = some (d + 1) then { o with live := false } else o
+    depth := d }
 
 /--
   Check if an access of `size` bytes at `p` is allowed.
 -/
 def MemoryState.checkAccess (mem : MemoryState) (p : Pointer) (size : UInt64) : Interp Unit := do
   let some obj := mem.getObject? p | Interp.fail none
+
+  -- An object of a returned frame may not be accessed.
+  if obj.live = false then Interp.ub none
 
   -- An access of zero bytes is allowed at any offset, in bounds or not.
   if size = 0 then return ()
@@ -248,7 +275,8 @@ def MemoryState.loadByte64 (mem : MemoryState) (p : Pointer) : Interp (Data.LLVM
   let ba ← mem.load p 8
   let baPoison ← mem.loadPoison p 8
   let poison := baPoison.toUInt64LE!.toBitVec
-  return ⟨ba.toUInt64LE!.toBitVec &&& ~~~poison, poison, by bv_decide⟩
+  return ⟨ba.toUInt64LE!.toBitVec &&& ~~~poison, poison,
+    by rw [BitVec.and_assoc, BitVec.not_and_self]; simp⟩
 
 /--
   Load an LLVM value from the given memory address.
@@ -288,7 +316,8 @@ def MemoryState.llvmLoad (mem : MemoryState) (p : Pointer) (type : TypeAttr)
   | Attribute.byteType { bitwidth := 8 } =>
       let ba ← mem.load p 1
       let poison := BitVec.ofNat 8 (← mem.loadPoison p 1)[0]!.toNat
-      return .byte 8 ⟨BitVec.ofNat 8 ba[0]!.toNat &&& ~~~poison, poison, by bv_decide⟩
+      return .byte 8 ⟨BitVec.ofNat 8 ba[0]!.toNat &&& ~~~poison, poison,
+        by rw [BitVec.and_assoc, BitVec.not_and_self]; simp⟩
   | Attribute.byteType { bitwidth := 64 } =>
       return .byte 64 (← mem.loadByte64 p)
   | Attribute.llvmPointerType _ =>

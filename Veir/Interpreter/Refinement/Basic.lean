@@ -70,20 +70,23 @@ def MemoryByte.isRefinedBy (source target : MemoryByte) : Prop :=
 
 @[inherit_doc] infix:50 " ⊒ " => MemoryByte.isRefinedBy
 
-/-- Refinement of memory states: the same objects, each refined bytewise. -/
+/-- Refinement of memory states: the same objects, each refined bytewise, and the same symbol
+table, heap limit and call depth. -/
 @[expose]
 def MemoryState.isRefinedBy (source target : MemoryState) : Prop :=
-  source.objects = target.objects ∧ ∀ addr, source.byte addr ⊒ target.byte addr
+  source.objects = target.objects ∧ (∀ addr, source.byte addr ⊒ target.byte addr) ∧
+    source.globals = target.globals ∧ source.heapLimit = target.heapLimit ∧
+    source.depth = target.depth
 
 @[inherit_doc] infix:50 " ⊒ " => MemoryState.isRefinedBy
 
 /--
 A function interpretation `source` is refined by `target`. This asserts that the final memories
-are equal, and the returned values refine pointwise.
+refine, and the returned values refine pointwise.
 -/
 @[expose]
 def FunctionResult.isRefinedBy (source target : MemoryState × Array RuntimeValue) : Prop :=
-  source.1 = target.1 ∧ source.2 ⊒ target.2
+  source.1 ⊒ target.1 ∧ source.2 ⊒ target.2
 
 @[inherit_doc] infix:50 " ⊒ " => FunctionResult.isRefinedBy
 
@@ -136,19 +139,21 @@ def OperationResult.isRefinedBy (source target :
     ControlFlowAction.optionIsRefinedBy source.2.2 target.2.2
 
 /--
-The function `func₁` (in `ctx₁`) is *refined by* `func₂` (in `ctx₂`) when, for every argument
-`values` and initial memory `mem`, interpreting `func₁` is refined by interpreting `func₂`.
+The function `func₁` (in `ctx₁`, with calls resolved by `call₁`) is *refined by* `func₂` (in
+`ctx₂`, with calls resolved by `call₂`) when, for all refining arguments and refining initial
+memories, interpreting `func₁` is refined by interpreting `func₂`.
 -/
 @[expose]
 def FunctionOp.isRefinedBy {ctx₁ ctx₂ : WfIRContext OpCode} {op₁ op₂ : OperationPtr}
     (func₁ : FunctionOp ctx₁.raw op₁) (func₂ : FunctionOp ctx₂.raw op₂)
     (op₁In : op₁.InBounds ctx₁.raw := by grind)
-    (op₂In : op₂.InBounds ctx₂.raw := by grind) : Prop :=
-  ∀ (valuesSource valuesTarget : Array RuntimeValue) (mem : MemoryState),
-    valuesSource ⊒ valuesTarget →
+    (op₂In : op₂.InBounds ctx₂.raw := by grind)
+    (call₁ call₂ : Option CallOracle := none) : Prop :=
+  ∀ (valuesSource valuesTarget : Array RuntimeValue) (memSource memTarget : MemoryState),
+    valuesSource ⊒ valuesTarget → memSource ⊒ memTarget →
     Interp.isRefinedBy FunctionResult.isRefinedBy
-      (interpretFunction func₁ valuesSource mem op₁In)
-      (interpretFunction func₂ valuesTarget mem op₂In)
+      (interpretFunction func₁ valuesSource memSource op₁In call₁)
+      (interpretFunction func₂ valuesTarget memTarget op₂In call₂)
 
 /--
 The function-like operation `op₁` (in `ctx₁`) is *refined by* the function-like operation `op₂`
@@ -163,20 +168,28 @@ def OperationPtr.isRefinedByAsFunction (op₁ : OperationPtr) (ctx₁ : WfIRCont
   | some func₁, some func₂ => func₁.isRefinedBy func₂ op₁In op₂In
   | _, _ => False
 
+/-- The symbol name of a `func.func` or `llvm.func` operation. -/
+@[expose]
+def OperationPtr.funcSymName? (op : OperationPtr) (ctx : IRContext OpCode) : Option StringAttr :=
+  match op.getOpType! ctx with
+  | .func .func => some (op.getProperties! ctx (OpCode.func .func) : FuncFuncProperties).sym_name
+  | .llvm .func => some (op.getProperties! ctx (OpCode.llvm .func) : LLVMFuncProperties).sym_name
+  | _ => none
+
 /--
 `op` is a top-level function of the module operation `moduleOp` (in `ctx`): it is a `func.func`
-operation whose parent operation is `moduleOp`.
+or `llvm.func` operation named `name` whose parent operation is `moduleOp`.
 -/
 structure OperationPtr.IsTopLevelFuncWithName (op : OperationPtr) (moduleOp : OperationPtr)
     (ctx : IRContext OpCode) (name : StringAttr) : Prop where
-  isFunc : op.getOpType! ctx = .func .func
-  hasName : name = (op.getProperties! ctx Func.func).sym_name
+  isFunc : op.getOpType! ctx = .func .func ∨ op.getOpType! ctx = .llvm .func
+  hasName : op.funcSymName? ctx = some name
   isTopLevel : op.getParentOp! ctx = some moduleOp
 
 /--
 The module `mod₁` (in `ctx₁`) is *refined by* the module `mod₂` (in `ctx₂`) when every top-level
-`func.func` of `mod₁` is refined, as a function, by a top-level `func.func` of `mod₂` that carries
-the same symbol name.
+`func.func` or `llvm.func` of `mod₁` is refined, as a function, by a top-level `func.func` or
+`llvm.func` of `mod₂` that carries the same symbol name.
 
 In particular, note that `mod₂` may have extra top-level functions that are not in `mod₁`, but
 every function in `mod₁` must be matched by a same-named function in `mod₂` that refines it.

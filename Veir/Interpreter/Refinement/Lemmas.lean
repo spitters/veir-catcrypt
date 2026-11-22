@@ -52,7 +52,7 @@ theorem MemoryByte.isRefinedBy_refl (b : MemoryByte) : b ⊒ b := by
 @[simp, grind .]
 theorem MemoryState.isRefinedBy_refl (m : MemoryState) :
     m ⊒ m :=
-  ⟨rfl, fun _ => MemoryByte.isRefinedBy_refl _⟩
+  ⟨rfl, fun _ => MemoryByte.isRefinedBy_refl _, rfl, rfl, rfl⟩
 
 @[simp, grind .]
 theorem FunctionResult.isRefinedBy_refl (r : MemoryState × Array RuntimeValue) : r ⊒ r := by
@@ -114,7 +114,8 @@ theorem MemoryByte.isRefinedBy_trans {b1 b2 b3 : MemoryByte}
 
 theorem MemoryState.isRefinedBy_trans {m1 m2 m3 : MemoryState}
     (h12 : m1 ⊒ m2) (h23 : m2 ⊒ m3) : m1 ⊒ m3 :=
-  ⟨h12.1.trans h23.1, fun addr => MemoryByte.isRefinedBy_trans (h12.2 addr) (h23.2 addr)⟩
+  ⟨h12.1.trans h23.1, fun addr => MemoryByte.isRefinedBy_trans (h12.2.1 addr) (h23.2.1 addr),
+    h12.2.2.1.trans h23.2.2.1, h12.2.2.2.1.trans h23.2.2.2.1, h12.2.2.2.2.trans h23.2.2.2.2⟩
 
 theorem RuntimeValue.arrayIsRefinedBy_trans {a b c : Array RuntimeValue}
     (h12 : a ⊒ b) (h23 : b ⊒ c) : a ⊒ c := by
@@ -122,7 +123,8 @@ theorem RuntimeValue.arrayIsRefinedBy_trans {a b c : Array RuntimeValue}
 
 theorem FunctionResult.isRefinedBy_trans {r₁ r₂ r₃ : MemoryState × Array RuntimeValue}
     (h12 : r₁ ⊒ r₂) (h23 : r₂ ⊒ r₃) : r₁ ⊒ r₃ := by
-  grind [FunctionResult.isRefinedBy, RuntimeValue.arrayIsRefinedBy_trans]
+  exact ⟨MemoryState.isRefinedBy_trans h12.1 h23.1,
+    RuntimeValue.arrayIsRefinedBy_trans h12.2 h23.2⟩
 
 theorem Interp.isRefinedBy_trans {α : Type} {R : α → α → Prop}
     (hR : ∀ a b c, R a b → R b c → R a c)
@@ -135,11 +137,15 @@ theorem Interp.isRefinedBy_trans {α : Type} {R : α → α → Prop}
   rcases v₃ with _ | (v₃ | _) <;>
   grind
 
-theorem FunctionOp.isRefinedBy_trans
-    (h12 : isRefinedBy func₁ func₂ op₁In op₂In)
-    (h23 : isRefinedBy func₂ func₃ op₂In op₃In) :
-    isRefinedBy func₁ func₃ op₁In op₃In := by
-  grind [isRefinedBy, Interp.isRefinedBy_trans, FunctionResult.isRefinedBy_trans]
+theorem FunctionOp.isRefinedBy_trans {call₁ call₂ call₃ : Option CallOracle}
+    (h12 : isRefinedBy func₁ func₂ op₁In op₂In call₁ call₂)
+    (h23 : isRefinedBy func₂ func₃ op₂In op₃In call₂ call₃) :
+    isRefinedBy func₁ func₃ op₁In op₃In call₁ call₃ := by
+  intro vs vt ms mt hv hm
+  exact Interp.isRefinedBy_trans (R := FunctionResult.isRefinedBy)
+    (fun _ _ _ => FunctionResult.isRefinedBy_trans)
+    (h12 vs vt ms mt hv hm)
+    (h23 vt vt mt mt (RuntimeValue.arrayIsRefinedBy_refl vt) (MemoryState.isRefinedBy_refl mt))
 
 theorem OperationPtr.isRefinedByAsFunction_trans
     (h12 : isRefinedByAsFunction op₁ ctx₁ op₂ ctx₂ op₁In op₂In)

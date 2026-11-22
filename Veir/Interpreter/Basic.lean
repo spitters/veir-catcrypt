@@ -135,6 +135,81 @@ def interpretOp (op : OperationPtr) {ctx : WfIRContext OpCode} (state : Interpre
   return (newState, action)
 
 /--
+  What a call resolves to: a function body of the module, or an interpreted external.
+  The oracle receives the callee symbol, the argument values and the memory, and returns the
+  memory and the results after the call.
+-/
+abbrev CallOracle := String → Array RuntimeValue → MemoryState →
+  Interp (MemoryState × Array RuntimeValue)
+
+/--
+  The callee of a call operation: `some (some s)` for a direct call of the symbol `s`,
+  `some none` for an indirect call through the first operand, `none` if `op` is no call.
+-/
+@[expose]
+def OperationPtr.callee? (op : OperationPtr) (ctx : IRContext OpCode) : Option (Option String) :=
+  match op.getOpType! ctx with
+  | .llvm .call => some ((op.getProperties! ctx (OpCode.llvm .call) : LLVMCallProperties).callee.map (·.value))
+  | .func .call => some (some (op.getProperties! ctx (OpCode.func .call) : FuncCallProperties).callee.value)
+  | _ => none
+
+/--
+  The symbol and argument values of a call: the symbol of a direct call with all operands, or
+  the symbol of the function object that the first operand points to (at offset 0) with the
+  remaining operands. A poison callee pointer, or one that points to no function or global
+  object, is UB.
+-/
+@[expose]
+def resolveCallee (mem : MemoryState) (callee : Option String) (operands : Array RuntimeValue) :
+    Interp (String × Array RuntimeValue) :=
+  match callee with
+  | some s => .ok (s, operands)
+  | none =>
+    match operands[0]? with
+    | some (RuntimeValue.addr (.val p)) =>
+      match mem.globalAt? p with
+      | some s => .ok (s, operands.extract 1)
+      | none => .ub none
+    | some (RuntimeValue.addr .poison) => .ub none
+    | _ => .fail none
+
+/--
+  Interpret a call operation with the oracle `call`. The failures and UB of resolving the
+  callee and of setting the results are blamed on `op`; the outcome of the callee is passed on
+  unchanged, so that the interpretation is monotone in the oracle (a callee that does not
+  terminate stays the least element `ub none`).
+-/
+@[expose]
+def interpretCall (call : CallOracle) (callee : Option String) (op : OperationPtr)
+    {ctx : WfIRContext OpCode} (state : InterpreterState ctx)
+    (inBounds : op.InBounds ctx.raw := by grind)
+    : Interp (InterpreterState ctx × Option ControlFlowAction) := do
+  let some operands := state.variables.getOperandValues op | .fail (some op)
+  let (sym, args) ← (resolveCallee state.memory callee operands).withBlame op
+  let (mem, results) ← call sym args state.memory
+  let newVars ← (Interp.withBlame op (state.variables.setResultValues? op results : Interp _))
+  return (⟨newVars, mem⟩, none)
+
+/--
+  Interpret a single operation with the optional call oracle `call`. Without an oracle, or for an
+  operation that is no call, this is `interpretOp`; with an oracle, a call runs the oracle.
+-/
+@[expose]
+def interpretOpWith (call : Option CallOracle) (op : OperationPtr) {ctx : WfIRContext OpCode}
+    (state : InterpreterState ctx) (inBounds : op.InBounds ctx.raw := by grind)
+    : Interp (InterpreterState ctx × Option ControlFlowAction) :=
+  match call with
+  | none => interpretOp op state inBounds
+  | some c =>
+    match op.callee? ctx.raw with
+    | some callee => interpretCall c callee op state inBounds
+    | none => interpretOp op state inBounds
+
+@[simp] theorem interpretOpWith_none {ctx : WfIRContext OpCode} (op : OperationPtr)
+    (state : InterpreterState ctx) (inBounds : op.InBounds ctx.raw) :
+    interpretOpWith none op state inBounds = interpretOp op state inBounds := rfl
+
+/--
   Interpret a chain of operations, starting from the given operation pointer.
   Continue to interpret operations until a terminator is encountered,
   or the end of the block is reached.
@@ -142,13 +217,13 @@ def interpretOp (op : OperationPtr) {ctx : WfIRContext OpCode} (state : Interpre
   Return `none` if any errors occur during interpretation.
 -/
 def interpretOpChain (op : OperationPtr) {ctx : WfIRContext OpCode} (state : InterpreterState ctx)
-    (opInBounds : op.InBounds ctx.raw := by grind)
+    (opInBounds : op.InBounds ctx.raw := by grind) (call : Option CallOracle := none)
     : Interp (InterpreterState ctx × ControlFlowAction) := do
-  let (state, action) ← interpretOp op state
+  let (state, action) ← interpretOpWith call op state
   match action with
   | none =>
     rlet next ← op.getNextOp ctx.raw
-    interpretOpChain next state
+    interpretOpChain next state (call := call)
   | some action =>
     return (state, action)
 termination_by op.idxInParentFromTail ctx.raw
@@ -163,14 +238,14 @@ decreasing_by grind
 -/
 def interpretOpList {ctx : WfIRContext OpCode} (ops : List OperationPtr)
     (state : InterpreterState ctx)
-    (opInBounds : ∀ op ∈ ops, op.InBounds ctx.raw := by grind)
+    (opInBounds : ∀ op ∈ ops, op.InBounds ctx.raw := by grind) (call : Option CallOracle := none)
     : Interp (InterpreterState ctx × Option ControlFlowAction) :=
   match ops with
   | [] => return (state, none)
   | op :: ops => do
-    let (state, action) ← interpretOp op state
+    let (state, action) ← interpretOpWith call op state
     match action with
-    | none => interpretOpList ops state (by grind)
+    | none => interpretOpList ops state (by grind) call
     | some cf => return (state, cf)
 
 /--
@@ -182,9 +257,9 @@ def interpretOpList {ctx : WfIRContext OpCode} (ops : List OperationPtr)
 @[expose]
 def interpretTerminatedOpList {ctx : WfIRContext OpCode} (ops : List OperationPtr)
     (state : InterpreterState ctx)
-    (opInBounds : ∀ op ∈ ops, op.InBounds ctx.raw := by grind)
+    (opInBounds : ∀ op ∈ ops, op.InBounds ctx.raw := by grind) (call : Option CallOracle := none)
     : Interp (InterpreterState ctx × ControlFlowAction) := do
-  match ← interpretOpList ops state opInBounds with
+  match ← interpretOpList ops state opInBounds call with
   | (_, none) => none
   | (state, some cf) => return (state, cf)
 
@@ -196,12 +271,13 @@ def interpretTerminatedOpList {ctx : WfIRContext OpCode} (ops : List OperationPt
   Return `none` if any errors occur during interpretation.
 -/
 def interpretBlock (blockPtr : BlockPtr) (values : Array RuntimeValue) {ctx : WfIRContext OpCode}
-    (state : InterpreterState ctx) (blockInBounds : blockPtr.InBounds ctx.raw := by grind) :
+    (state : InterpreterState ctx) (blockInBounds : blockPtr.InBounds ctx.raw := by grind)
+    (call : Option CallOracle := none) :
     Interp (InterpreterState ctx × ControlFlowAction) := do
   let newVars ← state.variables.setArgumentValues? blockPtr values
   let state := ⟨newVars, state.memory⟩
   rlet firstOp ← blockPtr.getFirstOp ctx.raw
-  interpretOpChain firstOp state
+  interpretOpChain firstOp state (call := call)
 
 /--
   Interpret a CFG, starting from the given block.
@@ -210,13 +286,14 @@ def interpretBlock (blockPtr : BlockPtr) (values : Array RuntimeValue) {ctx : Wf
   Return `none` if any errors occur during interpretation.
 -/
 def interpretBlockCFG (blockPtr : BlockPtr) (values : Array RuntimeValue) {ctx : WfIRContext OpCode}
-    (state : InterpreterState ctx) (blockInBounds : blockPtr.InBounds ctx.raw := by grind) :
+    (state : InterpreterState ctx) (blockInBounds : blockPtr.InBounds ctx.raw := by grind)
+    (call : Option CallOracle := none) :
     Interp (InterpreterState ctx × Array RuntimeValue) := do
-  match interpretBlock blockPtr values state blockInBounds with
+  match interpretBlock blockPtr values state blockInBounds call with
   | .ok (state, .return res) => .ok (state, res)
   | .ok (state, .branch res succ) =>
     if h : succ.InBounds ctx.raw then
-      interpretBlockCFG succ res state h
+      interpretBlockCFG succ res state h call
     else
       .fail none
   | .ub op => .ub op
@@ -230,15 +307,19 @@ partial_fixpoint
   if any errors occur during interpretation.
 -/
 def interpretRegion (region : RegionPtr) (values : Array RuntimeValue) {ctx : WfIRContext OpCode}
-    (state : InterpreterState ctx) (regionIn : region.InBounds ctx.raw := by grind) :
+    (state : InterpreterState ctx) (regionIn : region.InBounds ctx.raw := by grind)
+    (call : Option CallOracle := none) :
     Interp (InterpreterState ctx × Array RuntimeValue) := do
   rlet block ← region.getFirstBlock ctx.raw
-  interpretBlockCFG block values state
+  interpretBlockCFG block values state (call := call)
 
 /--
   Interpret an operation representing a function, given the runtime values of its arguments
   and the current memory state. Return the resulting memory state and the values eventually
   returned.
+
+  The body runs one frame deeper than `mem`, and on return the objects of that frame (the
+  `alloca`s of this call) are dead.
 
   Unlike the other interpreter functions, this does not take an `InterpreterState`:
   a function call starts with a fresh, empty variable state, since the caller's SSA
@@ -246,14 +327,15 @@ def interpretRegion (region : RegionPtr) (values : Array RuntimeValue) {ctx : Wf
 -/
 def interpretFunction {ctx : WfIRContext OpCode} {op : OperationPtr}
     (funcOp : FunctionOp ctx.raw op) (values : Array RuntimeValue)
-    (mem : MemoryState) (opIn : op.InBounds ctx.raw := by grind) :
+    (mem : MemoryState) (opIn : op.InBounds ctx.raw := by grind)
+    (call : Option CallOracle := none) :
     Interp (MemoryState × Array RuntimeValue) := do
   if h : op.getNumRegions ctx.raw ≠ 1 then
     none
   else
-    let state : InterpreterState ctx := ⟨.empty ctx, mem⟩
-    let (state, results) ← interpretRegion funcOp.getFunctionBody values state
-    return (state.memory, results)
+    let state : InterpreterState ctx := ⟨.empty ctx, { mem with depth := mem.depth + 1 }⟩
+    let (state, results) ← interpretRegion funcOp.getFunctionBody values state (call := call)
+    return (state.memory.popFrame mem.depth, results)
 
 /--
   Interpret a builtin.module operation.

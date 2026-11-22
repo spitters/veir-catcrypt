@@ -6,3 +6,7 @@ public import Veir.Interpreter.Lemmas
 public import Veir.Interpreter.EquationLemma
 public import Veir.Interpreter.Refinement
 public import Veir.Interpreter.CTreeInterpreter
+public import Veir.Interpreter.Calls
+public import Veir.Interpreter.Heap
+public import Veir.Interpreter.Refinement.WRP
+public import Veir.Interpreter.LoadStore

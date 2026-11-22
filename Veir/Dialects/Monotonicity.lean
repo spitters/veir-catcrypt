@@ -1,6 +1,7 @@
 module
 
 public import Veir.Dialects.LLVM.Monotonicity
+public import Veir.Dialects.LLVM.MonotonicityMore
 public import Veir.Dialects.RISCV.Monotonicity
 
 public section

@@ -37,3 +37,8 @@ root = "Exe.VeirInterpret"
 [[lean_exe]]
 name = "veir2mir"
 root = "Exe.VeirToMIR"
+
+[[require]]
+name = "refinement-wp"
+git = "https://github.com/spitters/refinement-wp"
+rev = "01ed70e1fe5f6b6801098fc438f25e1ba7e03757"
