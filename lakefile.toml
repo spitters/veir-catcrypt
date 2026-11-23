@@ -41,4 +41,4 @@ root = "Exe.VeirToMIR"
 [[require]]
 name = "refinement-wp"
 git = "https://github.com/spitters/refinement-wp"
-rev = "01ed70e1fe5f6b6801098fc438f25e1ba7e03757"
+rev = "a6d7ea8f7ad5da119440cb2cad179d30d20f056e"
